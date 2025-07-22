@@ -1,0 +1,528 @@
+"""
+Specific dataset processors for OAKINKv2 and TACO datasets.
+"""
+
+import os
+import ast
+import json
+import pickle
+import logging
+from typing import Dict, List, Tuple, Any, Optional
+import numpy as np
+import torch
+import open3d as o3d
+from scipy.spatial.transform import Rotation as R
+from pytorch3d.transforms import (
+    rotation_6d_to_matrix, quaternion_to_matrix, matrix_to_quaternion, matrix_to_rotation_6d, axis_angle_to_quaternion
+)
+import sys; sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from base import BaseDatasetProcessor, DatasetRegistry, ORIGIN_DATA_PATH, HUMAN_SEQ_PATH
+from utils import apply_transformation_pt
+
+# Oakinkv2Processor
+@DatasetRegistry.register('oakinkv2')
+class OAKINKv2Processor(BaseDatasetProcessor):
+    """Processor for OAKINKv2 dataset."""
+    
+    def _setup_paths(self):
+        """Setup OAKINKv2-specific paths."""
+        self.desc_dir = os.path.join(self.root_path, 'program', 'desc_info')
+        self.program_dir = os.path.join(self.root_path, 'program', 'program_info')
+        self.anno_dir = os.path.join(self.root_path, 'anno_preview')
+        self.obj_dir = os.path.join(self.root_path, 'object_preview', 'align_ds')
+        
+        # Load object info
+        obj_info_path = os.path.join(self.root_path, 'object_preview', 'obj_desc.json')
+        if os.path.exists(obj_info_path):
+            with open(obj_info_path, 'r') as f:
+                self.obj_info = json.load(f)
+        else:
+            self.obj_info = {}  # Fallback for testing
+        
+        # Skip problematic objects
+        self.skip_obj_name_ls = [
+            "O02@0039@00002", "O02@0039@00003", "O02@0039@00004",  # microwave
+            "O02@0045@00001", "O02@0045@00002", "O02@0045@00003",  # lamp
+            "O02@0054@00001",  # whiteboard
+            'O02@0038@00001',  # weight metric
+            'O02@0018@00001', 'O02@0018@00002',  # box
+            'O02@0201@00001',  # tripod
+            'O02@0053@00001', 'O02@0053@00002',  # laptop
+            'O02@0019@00001', 'O02@0019@00002',  # drawer
+        ]
+    def _get_data_list(self) -> np.ndarray:
+        """Get list of OAKINKv2 data files."""
+        if not os.path.exists(self.anno_dir):
+            return np.array([])  # Return empty array if directory doesn't exist
+        
+        data_ls = os.listdir(self.anno_dir)
+        data_ls = sorted([
+            os.path.splitext(filename)[0] 
+            for filename in data_ls 
+            if filename.endswith('.pkl')
+        ])
+        return np.asarray(data_ls)   
+    
+    def _load_sequence_data(self, task_name: str) -> List[Dict[str, Any]]:
+        """Load raw sequence data for OAKINKv2."""
+        sequences = []
+        
+        try:
+            # Load annotation files
+            anno_filepath = os.path.join(self.anno_dir, task_name + '.pkl')
+            with open(anno_filepath, "rb") as f:
+                anno = pickle.load(f)
+            
+            with open(os.path.join(self.desc_dir, task_name + '.json'), 'r') as f:
+                desc = json.load(f)
+            
+            with open(os.path.join(self.program_dir, task_name + '.json'), 'r') as f:
+                program = json.load(f)
+            
+            # Parse segments
+            segs = [ast.literal_eval(seg) for seg in desc.keys()]
+            
+            for seg_idx, seg in enumerate(segs):
+                try:
+                    description = desc[str(seg)]['seg_desc']
+                    lh_primitive = program[str(seg)]['primitive_lh']
+                    rh_primitive = program[str(seg)]['primitive_rh']
+                    
+                    # Check if segments should be skipped
+                    l_skip, r_skip = self._check_skip_conditions(program[str(seg)])
+                    
+                    # Process left hand
+                    if lh_primitive is not None and not l_skip:
+                        l_obj_names = program[str(seg)]['obj_list_lh']
+                        l_desc = self._get_hand_description(program[str(seg)], lh_primitive, 'lh')
+                        
+                        sequences.append({
+                            'which_dataset': 'Oakinkv2',
+                            'which_sequence': task_name,
+                            'task_name': task_name,
+                            'seg': seg,
+                            'side': 'l',
+                            'frame_indices': list(range(seg[0][0], seg[0][1], self.task_interval)),
+                            'obj_names': l_obj_names,
+                            'primitive': lh_primitive,
+                            'description': l_desc,
+                            'extra_desc': description,
+                            'anno': anno,
+                            'l_valid': True,
+                            'r_valid': False
+                        })
+                    
+                    # Process right hand
+                    if rh_primitive is not None and not r_skip:
+                        r_obj_names = program[str(seg)]['obj_list_rh']
+                        r_desc = self._get_hand_description(program[str(seg)], rh_primitive, 'rh')
+                        
+                        sequences.append({
+                            'which_dataset': 'Oakinkv2',
+                            'which_sequence': task_name,
+                            'task_name': task_name,
+                            'seg': seg,
+                            'side': 'r',
+                            'frame_indices': list(range(seg[1][0], seg[1][1], self.task_interval)),
+                            'obj_names': r_obj_names,
+                            'primitive': rh_primitive,
+                            'description': r_desc,
+                            'extra_desc': description,
+                            'anno': anno,
+                            'l_valid': False,
+                            'r_valid': True
+                        })
+                        
+                except Exception as e:
+                    logging.error(f"Error processing segment {seg} in {task_name}: {e}")
+                    continue
+                    
+        except Exception as e:
+            logging.error(f"Error loading {task_name}: {e}")
+            return []
+        
+        return sequences
+    
+    def _check_skip_conditions(self, program_seg: Dict[str, Any]) -> Tuple[bool, bool]:
+        """Check if left/right hand segments should be skipped."""
+        left_skip = True
+        right_skip = True
+        
+        if (program_seg['obj_list_lh'] is not None and 
+            len(program_seg['obj_list_lh']) > 0):
+            left_skip = False
+            for obj in program_seg['obj_list_lh']:
+                if obj in self.skip_obj_name_ls:
+                    left_skip = True
+                    break
+        
+        if (program_seg['obj_list_rh'] is not None and 
+            len(program_seg['obj_list_rh']) > 0):
+            right_skip = False
+            for obj in program_seg['obj_list_rh']:
+                if obj in self.skip_obj_name_ls:
+                    right_skip = True
+                    break
+        
+        return left_skip, right_skip
+    
+    def _get_task_description(self, raw_data: Dict[str, Any]) -> str:
+        """Get task description for OAKINKv2."""
+        return raw_data.get('description', '')
+
+    def _get_hand_description(self, program_seg: Dict[str, Any], primitive: str, hand: str) -> str:
+        """Generate hand description."""
+        obj_key = f'obj_list_{hand}'
+        obj_list = program_seg[obj_key]
+        
+        if '_' in primitive:
+            primitive_parts = primitive.split('_')
+            if primitive_parts[-1] not in ['onto', 'outside', 'inside']:
+                return ' '.join(primitive_parts)
+            else:
+                obj_names = list(set([self.obj_info[obj]['obj_name'] for obj in obj_list]))
+                return f"{' '.join(primitive_parts)} the {' and '.join(obj_names)}"
+        else:
+            obj_names = list(set([self.obj_info[obj]['obj_name'] for obj in obj_list]))
+            return f"{primitive} the {' and '.join(obj_names)}"
+
+
+    def _extract_hand_coeffs(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+        anno = raw_data['anno']
+        # Extract MANO parameters
+        h_coeffs = torch.concatenate([
+            anno["raw_mano"][ii][f'{side}h__pose_coeffs'] 
+            for ii in frame_indices
+        ], dim=0).to('cuda') # (T, 16, 4)
+        
+        h_tsl = torch.concatenate([
+            anno["raw_mano"][ii][f'{side}h__tsl'] 
+            for ii in frame_indices
+        ], dim=0).to('cuda') # (T, 3)
+
+        h_betas = torch.concatenate([
+            anno["raw_mano"][ii][f'{side}h__betas'] 
+            for ii in frame_indices
+        ], dim=0).to('cuda') # (T, 10)
+
+        return h_coeffs, h_tsl, h_betas
+
+    def _apply_transformation_pt(self, points: torch.Tensor, transform: torch.Tensor) -> torch.Tensor:
+        """Apply transformation to points."""
+        return apply_transformation_pt(points, transform)
+
+    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Process OAKINKv2 hand data."""
+        
+        h_coeffs, h_tsl, h_betas = self._extract_hand_coeffs(raw_data, side, frame_indices)
+        
+        yup2xup = self._apply_coordinate_transform(side).to('cuda')
+        
+        # Transform hand pose
+        hand_transformation = torch.eye(4).to('cuda').unsqueeze(0).repeat((h_coeffs.shape[0], 1, 1))
+        hand_rotation_quat = h_coeffs[:, 0]
+        hand_transformation[:, :3, :3] = quaternion_to_matrix(hand_rotation_quat)
+        h_coeffs[:, 0] = matrix_to_quaternion(yup2xup[:3, :3] @ hand_transformation[:, :3, :3])
+        h_tsl = self._apply_transformation_pt(h_tsl, yup2xup)
+        
+        return h_tsl, h_coeffs
+
+    def _get_object_info(self, raw_data: Dict[str, Any], frame_indices: List[int]) -> Tuple[List[torch.Tensor], List[str]]:
+        """Load OAKINKv2 object data."""
+        obj_names = raw_data['obj_names']
+        anno = raw_data['anno']
+        
+        # Get object meshes
+        mesh_paths = []
+        for obj_name in obj_names:
+            obj_folder = os.path.join(self.obj_dir, obj_name)
+            mesh_path = None
+            if os.path.isdir(obj_folder):
+                for fname in os.listdir(obj_folder):
+                    if fname.lower().endswith('.ply') or fname.lower().endswith('.obj'):
+                        mesh_path = os.path.join(obj_folder, fname)
+                        break
+            if mesh_path is None:
+                raise FileNotFoundError(f"No .ply or .obj mesh found in {obj_folder}")
+            mesh_paths.append(mesh_path)
+        
+        # Get object transformations
+        try:
+            obj_transf_all_list = [anno['obj_transf'][obj] for obj in obj_names]
+        except KeyError:
+            return None, None
+        
+        obj_transf_list = [
+            np.stack([obj_transf_all[frame] for frame in frame_indices if frame in obj_transf_all])
+            for obj_transf_all in obj_transf_all_list
+        ]
+
+        # Store mesh path info
+        raw_data['mesh_path'] = '$'.join(mesh_paths)
+        
+        return obj_transf_list, mesh_paths
+    
+
+
+
+# TacoProcessor
+@DatasetRegistry.register('taco')
+class TACOProcessor(BaseDatasetProcessor):
+    """Processor for TACO dataset."""
+    
+    def _setup_paths(self):
+        """Setup TACO-specific paths."""
+        self.hand_pose_dir = os.path.join(self.root_path, 'Hand_Poses')
+        self.obj_dir = os.path.join(self.root_path, 'object_models')
+        self.obj_pose_dir = os.path.join(self.root_path, 'Object_Poses')
+        
+        # Test data list
+        self.test_data_ls = [53, 181, 25, 73, 35, 115, 89, 160, 7, 189, 166, 105, 201, 81, 38, 66, 56, 141, 142, 138, 59]
+    
+    def _get_data_list(self) -> np.ndarray:
+        """Get list of TACO data items."""
+        if not os.path.exists(self.hand_pose_dir):
+            return np.array([])  # Return empty array if directory doesn't exist
+        return np.asarray(os.listdir(self.hand_pose_dir))
+    
+    def _load_sequence_data(self, task_name: str) -> List[Dict[str, Any]]:
+        """Load raw sequence data for TACO."""
+        sequences = []
+        
+        seq_list = os.listdir(os.path.join(self.hand_pose_dir, task_name))
+        
+        for seq_name in seq_list:
+            try:
+                # Get object pose directory
+                object_pose_dir = os.path.join(self.obj_pose_dir, task_name, seq_name)
+                hand_pose_dir = os.path.join(self.hand_pose_dir, task_name, seq_name)
+                
+                # Extract tool and target names
+                tool_name, target_name = None, None
+                for file_name in os.listdir(object_pose_dir):
+                    if file_name.startswith("tool_"):
+                        tool_name = file_name.split(".")[0].split("_")[-1]
+                    elif file_name.startswith("target_"):
+                        target_name = file_name.split(".")[0].split("_")[-1]
+                
+                if tool_name is None or target_name is None:
+                    continue
+                
+                # Extract action info
+                verb, tool_real_name, target_real_name = self._extract_action_info(task_name)
+                
+                # Load poses
+                tool_poses = np.load(os.path.join(object_pose_dir, f"tool_{tool_name}.npy"))
+                target_poses = np.load(os.path.join(object_pose_dir, f"target_{target_name}.npy"))
+                n_frames = tool_poses.shape[0]
+                
+                # Create sequences for tool (right hand) and target (left hand)
+                sequences.extend([
+                    {
+                        'which_dataset': 'TACO',
+                        'which_sequence': f'{task_name}-{seq_name}',
+                        'task_name': task_name,
+                        'seq_name': seq_name,
+                        'side': 'r',  # Tool manipulation with right hand
+                        'obj_name': tool_name,
+                        'obj_poses': tool_poses,
+                        'hand_pose_dir': hand_pose_dir,
+                        'n_frames': n_frames,
+                        'action_verb': verb,
+                        'obj_real_name': tool_real_name,
+                        'frame_indices': list(range(0, n_frames, self.task_interval)),
+                        'r_valid': True,
+                        'l_valid': False
+                    },
+                    {
+                        'which_dataset': 'TACO',
+                        'which_sequence': f'{task_name}-{seq_name}',
+                        'task_name': task_name,
+                        'seq_name': seq_name,
+                        'side': 'l',  # Target holding with left hand
+                        'obj_name': target_name,
+                        'obj_poses': target_poses,
+                        'hand_pose_dir': hand_pose_dir,
+                        'n_frames': n_frames,
+                        'action_verb': 'hold',
+                        'obj_real_name': target_real_name,
+                        'frame_indices': list(range(0, n_frames, self.task_interval)),
+                        'r_valid': False,
+                        'l_valid': True
+                    }
+                ])
+                
+            except Exception as e:
+                logging.error(f"Error processing TACO sequence {task_name}/{seq_name}: {e}")
+                continue
+        
+        return sequences
+    
+    def _extract_action_info(self, task_name: str) -> Tuple[str, str, str]:
+        """Extract action information from task name."""
+        import re
+        match = re.match(r'\(([^,]+), ([^,]+), ([^,]+)\)', task_name.strip("'"))
+        if match:
+            return match.group(1), match.group(2), match.group(3)
+        else:
+            return "unknown", "object", "target"
+    
+    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Process TACO hand data."""
+        hand_pose_dir = raw_data['hand_pose_dir']
+        device = torch.device('cuda')
+        
+        # Load hand poses
+        if side == 'r':
+            hand_pkl = pickle.load(open(os.path.join(hand_pose_dir, "right_hand.pkl"), "rb"))
+        else:
+            hand_pkl = pickle.load(open(os.path.join(hand_pose_dir, "left_hand.pkl"), "rb"))
+        
+        # Extract poses and translations
+        hand_theta_list = []
+        hand_trans_list = []
+        
+        keys = list(hand_pkl.keys())
+        keys.sort()
+        
+        for key in keys:
+            hand_theta_list.append(hand_pkl[key]["hand_pose"].detach().cpu().numpy())
+            hand_trans_list.append(hand_pkl[key]["hand_trans"].detach().cpu().numpy())
+        
+        hand_thetas_raw = torch.from_numpy(np.float32(hand_theta_list)).to(device)
+        hand_trans_raw = torch.from_numpy(np.float32(hand_trans_list)).to(device)
+        
+        # Convert to quaternions
+        hand_thetas_raw = axis_angle_to_quaternion(hand_thetas_raw.reshape(hand_thetas_raw.shape[0], 16, 3))
+        
+        # Apply coordinate transformation
+        yup2xup = torch.eye(4).to(device)
+        
+        hand_transform = torch.eye(4).to('cuda').unsqueeze(0).repeat((hand_thetas_raw.shape[0], 1, 1))
+        hand_transform[:, :3, :3] = quaternion_to_matrix(hand_thetas_raw[:, 0])
+        hand_transform[:, :3, 3] = hand_trans_raw
+        hand_transform = yup2xup @ hand_transform
+        hand_thetas_raw[:, 0] = matrix_to_quaternion(hand_transform[:, :3, :3])
+        hand_trans_raw = hand_transform[:, :3, 3]
+        
+        return hand_trans_raw[frame_indices], hand_thetas_raw[frame_indices]
+    
+
+    def _get_object_info(self, raw_data: Dict[str, Any], frame_indices: List[int]) -> Tuple[List[torch.Tensor], List[str]]:
+        """Load TACO object data."""
+        obj_name = raw_data['obj_name']
+        obj_poses = raw_data['obj_poses']
+        
+        # Load object mesh
+        obj_path = os.path.join(self.obj_dir, obj_name + "_cm.obj")
+
+        # Apply coordinate transformation
+        yup2xup = self._apply_coordinate_transform(raw_data['side']).T
+        obj_poses_transformed = yup2xup.cpu().numpy().astype(np.float32) @ obj_poses
+        obj_transf_subset = obj_poses_transformed[frame_indices]
+
+        # Store mesh path
+        raw_data['mesh_path'] = obj_path
+
+        return [obj_transf_subset], [obj_path]        
+        
+    def _get_task_description(self, raw_data: Dict[str, Any]) -> str:
+        """Get task description for TACO."""
+        verb = raw_data['action_verb']
+        obj_name = raw_data['obj_real_name']
+        return f"{verb} the {obj_name}"
+
+
+
+# Dataset configurations
+DATASET_CONFIGS = {
+    'oakinkv2': {
+        'processor_name': 'oakinkv2',
+        'root_path': ORIGIN_DATA_PATH['Oakinkv2'],
+        'save_path': HUMAN_SEQ_PATH['Oakinkv2'],
+        'task_interval': 1,
+        'which_dataset': 'Oakinkv2',
+        'seq_data_name': 'debug',
+    },
+    
+    'taco': {
+        'processor_name': 'taco',
+        'root_path': ORIGIN_DATA_PATH['Taco'],
+        'save_path': HUMAN_SEQ_PATH['Taco'],
+        'task_interval': 1,
+        'which_dataset': 'Taco',
+        'seq_data_name': 'debug',
+    }
+}
+
+def process_single_dataset(dataset_name: str, **kwargs) -> List[Dict[str, Any]]:
+    """
+    Process a single dataset.
+    
+    Args:
+        dataset_name: Name of the dataset ('oakinkv2', 'taco', etc.)
+        **kwargs: Additional parameters to override default config
+    
+    Returns:
+        List of processed sequences
+    """
+    if dataset_name not in DATASET_CONFIGS:
+        raise ValueError(f"Unknown dataset: {dataset_name}")
+    
+    config = DATASET_CONFIGS[dataset_name].copy()
+    config.update(kwargs)
+    
+    processor_class = DatasetRegistry.get_processor(config['processor_name'])
+    processor = processor_class(**config)
+    
+    return processor.run()
+
+def load_multiple_datasets(processor_configs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Load and combine multiple datasets."""
+    all_data = []
+    
+    for config in processor_configs:
+        processor_name = config.pop('processor_name')
+        processor_class = DatasetRegistry.get_processor(processor_name)
+        processor = processor_class(**config)
+        data = processor.run()
+        all_data.extend(data)
+    
+    logging.info(f"Combined {len(all_data)} sequences from {len(processor_configs)} datasets")
+    return all_data
+
+def process_multiple_datasets(
+    dataset_names: List[str], 
+    configs: Optional[List[Dict[str, Any]]] = None
+) -> List[Dict[str, Any]]:
+    """
+    Process multiple datasets and combine them.
+    
+    Args:
+        dataset_names: List of dataset names to process
+        configs: Optional list of config overrides for each dataset
+    
+    Returns:
+        Combined list of processed sequences
+    """
+    if configs is None:
+        configs = [{}] * len(dataset_names)
+    
+    if len(configs) != len(dataset_names):
+        raise ValueError("configs length must match dataset_names length")
+    
+    processor_configs = []
+    for name, config_override in zip(dataset_names, configs):
+        if name not in DATASET_CONFIGS:
+            raise ValueError(f"Unknown dataset: {name}")
+        
+        config = DATASET_CONFIGS[name].copy()
+        config.update(config_override)
+        processor_configs.append(config)
+    
+    return load_multiple_datasets(processor_configs)
+
+if __name__ == "__main__":
+    # Example usage
+    dataset_names = ['oakinkv2', 'taco']
+    processed_data = process_multiple_datasets(dataset_names)
