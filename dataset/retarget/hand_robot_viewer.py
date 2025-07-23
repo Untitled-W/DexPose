@@ -137,6 +137,7 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             hand_pose_start[0, 0:3]
         )
         vertex, joint = self._compute_hand_geometry(hand_pose_start)
+        
         for robot, retargeting, retarget2sapien in zip(
             self.robots, self.retargetings, self.retarget2sapien
         ):
@@ -195,3 +196,89 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             self.viewer.render()
         else:
             writer.release()
+
+    def retarget_and_save(self, data: Dict, data_id, fps=5, y_offset=0.8):
+        # Set table and viewer pose for better visual effect only
+        global_y_offset = -y_offset * len(self.robots) / 2
+        self.table.set_pose(sapien.Pose([0.5, global_y_offset + 0.2, 0]))
+        if not self.headless:
+            self.viewer.set_camera_xyz(1.5, global_y_offset, 1)
+        else:
+            local_pose = self.camera.get_local_pose()
+            local_pose.set_p(np.array([1.5, global_y_offset, 1]))
+            self.camera.set_local_pose(local_pose)
+
+        hand_pose = data["hand_pose"]
+        object_pose = data["object_pose"]
+        num_frame = hand_pose.shape[0]
+        num_copy = len(self.robots) + 1
+        num_ycb_objects = len(data["ycb_ids"])
+        pose_offsets = []
+
+        for i in range(len(self.robots) + 1):
+            pose = sapien.Pose([0, -y_offset * i, 0])
+            pose_offsets.append(pose)
+            if i >= 1:
+                self.robots[i - 1].set_pose(pose)
+
+        # Skip frames where human hand is not detected in DexYCB dataset
+        start_frame = 0
+        for i in range(0, num_frame):
+            init_hand_pose_frame = hand_pose[i]
+            vertex, joint = self._compute_hand_geometry(init_hand_pose_frame)
+            if vertex is not None:
+                start_frame = i
+                break
+
+        # Warm start
+        hand_pose_start = hand_pose[start_frame]
+        wrist_quat = rotations.quaternion_from_compact_axis_angle(
+            hand_pose_start[0, 0:3]
+        )
+        vertex, joint = self._compute_hand_geometry(hand_pose_start)
+        
+        for robot, retargeting, retarget2sapien in zip(
+            self.robots, self.retargetings, self.retarget2sapien
+        ):
+            retargeting.warm_start(
+                joint[0, :],
+                wrist_quat,
+                hand_type=self.hand_type,
+                is_mano_convention=True,
+            )
+
+        # Loop rendering
+        step_per_frame = int(60 / fps)
+        for i in trange(start_frame, num_frame):
+            object_pose_frame = object_pose[i]
+            hand_pose_frame = hand_pose[i]
+            vertex, joint = self._compute_hand_geometry(hand_pose_frame)
+
+            # Update poses for YCB objects
+            for k in range(num_ycb_objects):
+                pos_quat = object_pose_frame[k]
+
+                # Quaternion convention: xyzw -> wxyz
+                pose = self.camera_pose * sapien.Pose(
+                    pos_quat[4:], np.concatenate([pos_quat[3:4], pos_quat[:3]])
+                )
+                self.objects[k].set_pose(pose)
+                for copy_ind in range(num_copy):
+                    self.objects[k + copy_ind * num_ycb_objects].set_pose(
+                        pose_offsets[copy_ind] * pose
+                    )
+
+            # Update pose for human hand
+            self._update_hand(vertex)
+
+            # Update poses for robot hands
+            for robot, retargeting, retarget2sapien in zip(
+                self.robots, self.retargetings, self.retarget2sapien
+            ):
+                indices = retargeting.optimizer.target_link_human_indices
+                ref_value = joint[indices, :]
+                qpos = retargeting.retarget(ref_value)[retarget2sapien]
+                robot.set_qpos(qpos)
+
+        
+        
