@@ -10,13 +10,14 @@ import logging
 from typing import Dict, List, Tuple, Any, Optional
 import numpy as np
 import torch
-import open3d as o3d
+import matplotlib.pyplot as plt
+from collections import Counter
 from scipy.spatial.transform import Rotation as R
 from pytorch3d.transforms import (
-    rotation_6d_to_matrix, quaternion_to_matrix, matrix_to_quaternion, matrix_to_rotation_6d, axis_angle_to_quaternion
+    quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
 )
 import sys; sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from base import BaseDatasetProcessor, DatasetRegistry, ORIGIN_DATA_PATH, HUMAN_SEQ_PATH
+from base import BaseDatasetProcessor, DatasetRegistry, HumanSequenceData, ORIGIN_DATA_PATH, HUMAN_SEQ_PATH
 from utils import apply_transformation_pt
 
 # Oakinkv2Processor
@@ -260,7 +261,7 @@ class OAKINKv2Processor(BaseDatasetProcessor):
         # Store mesh path info
         raw_data['mesh_path'] = '$'.join(mesh_paths)
         
-        return obj_transf_list, mesh_paths
+        return obj_transf_list, obj_names, mesh_paths
     
 
 
@@ -361,6 +362,7 @@ class TACOProcessor(BaseDatasetProcessor):
     def _extract_action_info(self, task_name: str) -> Tuple[str, str, str]:
         """Extract action information from task name."""
         import re
+
         match = re.match(r'\(([^,]+), ([^,]+), ([^,]+)\)', task_name.strip("'"))
         if match:
             return match.group(1), match.group(2), match.group(3)
@@ -424,7 +426,7 @@ class TACOProcessor(BaseDatasetProcessor):
         # Store mesh path
         raw_data['mesh_path'] = obj_path
 
-        return [obj_transf_subset], [obj_path]        
+        return [obj_transf_subset], [obj_name], [obj_path]        
         
     def _get_task_description(self, raw_data: Dict[str, Any]) -> str:
         """Get task description for TACO."""
@@ -440,9 +442,10 @@ DATASET_CONFIGS = {
         'processor_name': 'oakinkv2',
         'root_path': ORIGIN_DATA_PATH['Oakinkv2'],
         'save_path': HUMAN_SEQ_PATH['Oakinkv2'],
-        'task_interval': 1,
+        'task_interval': 10,
         'which_dataset': 'Oakinkv2',
         'seq_data_name': 'debug',
+        # 'sequence_indices': list(range(0, 5))  # Example sequence indices for processing
     },
     
     'taco': {
@@ -452,8 +455,20 @@ DATASET_CONFIGS = {
         'task_interval': 1,
         'which_dataset': 'Taco',
         'seq_data_name': 'debug',
+        # 'sequence_indices': list(range(0, 10))  # Example sequence indices for processing
     }
 }
+
+def setup_logging(level=logging.ERROR):
+    """Setup logging configuration."""
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler('preprocessing.log'),
+            logging.StreamHandler()
+        ]
+    )
 
 def process_single_dataset(dataset_name: str, **kwargs) -> List[Dict[str, Any]]:
     """
@@ -522,7 +537,110 @@ def process_multiple_datasets(
     
     return load_multiple_datasets(processor_configs)
 
+def show_human_statistics(human_data: List[HumanSequenceData]):
+    
+    # separate data from different datasets
+    dataset_data = {}
+    for data in human_data:
+        dataset_name = data.which_dataset
+        if dataset_name not in dataset_data:
+            dataset_data[dataset_name] = []
+        dataset_data[dataset_name].append(data)
+    num_datasets = len(dataset_data)
+
+    ### 1 - seq_len in each dataset
+    print(f"Number of datasets: {num_datasets}")
+    print(f"Total sequences: {len(human_data)}")
+    for dataset_name, data_list in dataset_data.items():
+        seq_lens = [len(d.frame_indices) if hasattr(d, 'frame_indices') else 0 for d in data_list]
+        print(f"Dataset {dataset_name} has {len(data_list)} sequences")
+        print(f"  Mean sequence length: {np.mean(seq_lens):.2f}, Std: {np.std(seq_lens):.2f}")
+    
+    GRAPH = True
+    if GRAPH:
+        fig, axes = plt.subplots(1, num_datasets + 1, figsize=(6 * (num_datasets + 1), 6), squeeze=False)
+        all_seq_lens = []
+        for idx, (dataset_name, data_list) in enumerate(dataset_data.items()):
+            seq_lens = [len(d.frame_indices) if hasattr(d, 'frame_indices') else 0 for d in data_list]
+            # seq_lens = [d.seq_len for d in data_list]
+            all_seq_lens.extend(seq_lens)
+            ax = axes[0, idx]
+            ax.hist(seq_lens, bins=30, alpha=0.7)
+            ax.set_title(f'Sequence Length Distribution in {dataset_name}')
+            ax.set_xlabel('Sequence Length')
+            ax.set_ylabel('Count')
+            ax.grid(True)
+        # Add subplot for all datasets combined
+        ax = axes[0, -1]
+        ax.hist(all_seq_lens, bins=30, alpha=0.7, color='gray')
+        ax.set_title('Sequence Length Distribution (All Datasets)')
+        ax.set_xlabel('Sequence Length')
+        ax.set_ylabel('Count')
+        ax.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+    ### 2 & 3 - objects number and sequence length in each dataset (bar chart with subplot)
+    fig, axes = plt.subplots(1, num_datasets * 2, figsize=(3 * (num_datasets * 2), 20), squeeze=False)
+
+    for idx, (dataset_name, data_list) in enumerate(dataset_data.items()):
+
+        # Flatten all object names for this dataset
+        object_names = []
+        object_seq_lens = {}
+        for d in data_list:
+            objs = d.object_names
+            object_names.extend(objs)
+            # Collect sequence lengths for each object
+            for obj in objs:
+                if obj not in object_seq_lens:
+                    object_seq_lens[obj] = []
+                object_seq_lens[obj].append(len(d.frame_indices))
+        
+        # Count occurrences
+        obj_counter = Counter(object_names)
+        ax = axes[0, 2 * idx]
+        obj_keys = list(obj_counter.keys())
+        obj_vals = list(obj_counter.values())
+        ax.barh(obj_keys, obj_vals, alpha=0.7)
+        ax.set_title(f'Object Distribution in {dataset_name}', fontsize=10)
+        ax.set_ylabel('Object Name', fontsize=10)
+        ax.set_xlabel('Count', fontsize=10)
+        ax.grid(True, axis='x')
+        ax.tick_params(axis='both', which='major', labelsize=8)
+
+        # Add subplot for mean and std of sequence lengths per object (order matches previous subplot)
+        means = [np.mean(object_seq_lens[obj]) for obj in obj_keys]
+        stds = [np.std(object_seq_lens[obj]) for obj in obj_keys]
+        ax = axes[0, 2 * idx + 1]
+        ax.barh(obj_keys, means, xerr=stds, alpha=0.7, color='lightgreen')
+        ax.set_title('Mean and Std of Sequence Lengths per Object', fontsize=10)
+        ax.set_xlabel('Mean Sequence Length', fontsize=10)
+        ax.set_ylabel('Object Name', fontsize=10)
+        ax.grid(True, axis='x')
+        ax.tick_params(axis='both', which='major', labelsize=8)
+
+    plt.tight_layout()
+    plt.show()
+
+    print()
+
+
+
 if __name__ == "__main__":
-    # Example usage
-    dataset_names = ['oakinkv2', 'taco']
-    processed_data = process_multiple_datasets(dataset_names)
+
+    dataset_names = ['taco', 'oakinkv2']
+    processed_data = []
+    
+    GENERATE = False
+    if GENERATE:
+        processed_data = process_multiple_datasets(dataset_names)
+    else:
+        for dataset_name in dataset_names:
+            file_path = os.path.join(DATASET_CONFIGS[dataset_name]['save_path'],f'seq_{DATASET_CONFIGS[dataset_name]["seq_data_name"]}_{DATASET_CONFIGS[dataset_name]["task_interval"]}.p')
+            with open(file_path, 'rb') as f:
+                data = pickle.load(f)
+                processed_data.extend(data)
+
+    # show human hand statistics
+    show_human_statistics(processed_data)

@@ -38,10 +38,11 @@ class HumanSequenceData:
     
     # Object data
     obj_poses: torch.Tensor  # K X T X 4 X 4
+    object_names: List[str]  # Names of objects in the sequence
+    object_mesh_path: List[str]
     
     # Metadata
-    object_mesh_path: List[str]
-    seq_len: int
+    frame_indices: List[int]  # Frame indices in the original sequence
     task_description: str
     which_dataset: str
     which_sequence: str
@@ -64,7 +65,7 @@ class DexSequenceData:
 
     # Metadata
     object_mesh_path: List[str]
-    seq_len: int
+    frame_indices: List[int]  # Frame indices in the original sequence
     task_description: str
     which_sequence: str
     extra_info: Optional[Dict[str, Any]] = None
@@ -81,11 +82,13 @@ class BaseDatasetProcessor(ABC):
         which_dataset: str,
         task_interval: int = 1,
         seq_data_name: str = "dataset",
+        sequence_indices: Optional[List[int]] = None
     ):
         self.root_path = root_path
         self.task_interval = task_interval
         self.which_dataset = which_dataset
         self.seq_data_name = seq_data_name
+        self.sequence_indices = sequence_indices
         
         self.mano_layer_left = ManoLayer(center_idx=0, side='left', rot_mode="quat", use_pca=False).cuda()
         self.mano_layer_right = ManoLayer(center_idx=0, side='right', rot_mode="quat", use_pca=False).cuda()
@@ -95,6 +98,7 @@ class BaseDatasetProcessor(ABC):
         
         # Initialize data list
         self.data_ls = self._get_data_list()
+        self.sequence_indices = sequence_indices if sequence_indices is not None else list(range(len(self.data_ls)))
 
         self.seq_save_path = f'{save_path}/seq_{seq_data_name}_{task_interval}.p'
 
@@ -160,7 +164,7 @@ class BaseDatasetProcessor(ABC):
         if hand_tsl is None: return None
 
         # Load object data
-        object_transf_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices)
+        object_transf_ls, object_name_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices)
         if object_transf_ls is None: return None
 
         # Convert to tensors and apply transformations
@@ -173,8 +177,9 @@ class BaseDatasetProcessor(ABC):
             hand_coeffs=hand_coeffs,
             side=1 if side == 'r' else 0,
             obj_poses=torch.stack(obj_transf_ls),
+            object_names=object_name_ls,
             object_mesh_path=object_mesh_path_ls,
-            seq_len=len(frame_indices),
+            frame_indices=frame_indices,
             which_dataset=raw_data['which_dataset'],
             which_sequence=raw_data['which_sequence'],
             task_description=self._get_task_description(raw_data),
@@ -182,17 +187,17 @@ class BaseDatasetProcessor(ABC):
         )
         
         return sequence_data
-    
-    def process_all_sequences(self) -> List[Dict[str, Any]]:
+
+    def process_all_sequences(self, sequence_indices: List[int]) -> List[Dict[str, Any]]:
 
         """Process all sequences in the dataset."""
         whole_data_ls = []
         bad_seq_num = 0
         
         # for idx in tqdm(range(len(self.data_ls)), desc=f"Processing {self.seq_data_name}"):
-        for idx in tqdm(range(10), desc=f"Processing {self.which_dataset}-{self.seq_data_name}"):
+        for idx in tqdm(sequence_indices, desc=f"Processing {self.which_dataset}-{self.seq_data_name}"):
 
-            DEBUG = True
+            DEBUG = False
 
             if DEBUG:
                 data_item = self.data_ls[idx]
@@ -234,7 +239,7 @@ class BaseDatasetProcessor(ABC):
     def run(self) -> List[Dict[str, Any]]:
         """Main processing pipeline."""
         logging.info(f"Starting {self.__class__.__name__} processing...")
-        data_list = self.process_all_sequences()
+        data_list = self.process_all_sequences(self.sequence_indices)
         self.save_processed_data(data_list)
         return data_list
     
