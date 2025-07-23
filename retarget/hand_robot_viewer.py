@@ -20,6 +20,7 @@ from dex_retargeting.retargeting_config import RetargetingConfig
 from dex_retargeting.seq_retarget import SeqRetargeting
 
 
+
 class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
     def __init__(
         self,
@@ -62,9 +63,10 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 str(urdf_path), add_dummy_free_joints=True, build_scene_graph=False
             )
             urdf_name = urdf_path.name
-            temp_dir = tempfile.mkdtemp(prefix="dex_retargeting-")
-            temp_path = f"{temp_dir}/{urdf_name}"
+            # temp_dir = tempfile.mkdtemp(prefix="dex_retargeting-")
+            temp_path = str(Path(__file__).parent / "urdf" / urdf_name)
             robot_urdf.write_xml_file(temp_path)
+            print(temp_path)
 
             robot = loader.load(temp_path)
             self.robots.append(robot)
@@ -247,8 +249,10 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 is_mano_convention=True,
             )
 
+        # Prepare to save qpos
+        qpos_dict = {robot_name: [] for robot_name in self.robot_names}
+
         # Loop rendering
-        step_per_frame = int(60 / fps)
         for i in trange(start_frame, num_frame):
             object_pose_frame = object_pose[i]
             hand_pose_frame = hand_pose[i]
@@ -258,27 +262,33 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             for k in range(num_ycb_objects):
                 pos_quat = object_pose_frame[k]
 
-                # Quaternion convention: xyzw -> wxyz
-                pose = self.camera_pose * sapien.Pose(
-                    pos_quat[4:], np.concatenate([pos_quat[3:4], pos_quat[:3]])
+            # Quaternion convention: xyzw -> wxyz
+            pose = self.camera_pose * sapien.Pose(
+                pos_quat[4:], np.concatenate([pos_quat[3:4], pos_quat[:3]])
+            )
+            self.objects[k].set_pose(pose)
+            for copy_ind in range(num_copy):
+                self.objects[k + copy_ind * num_ycb_objects].set_pose(
+                pose_offsets[copy_ind] * pose
                 )
-                self.objects[k].set_pose(pose)
-                for copy_ind in range(num_copy):
-                    self.objects[k + copy_ind * num_ycb_objects].set_pose(
-                        pose_offsets[copy_ind] * pose
-                    )
 
             # Update pose for human hand
             self._update_hand(vertex)
 
-            # Update poses for robot hands
-            for robot, retargeting, retarget2sapien in zip(
-                self.robots, self.retargetings, self.retarget2sapien
+            # Update poses for robot hands and save qpos
+            for robot, retargeting, retarget2sapien, robot_name in zip(
+            self.robots, self.retargetings, self.retarget2sapien, self.robot_names
             ):
                 indices = retargeting.optimizer.target_link_human_indices
                 ref_value = joint[indices, :]
                 qpos = retargeting.retarget(ref_value)[retarget2sapien]
                 robot.set_qpos(qpos)
+                qpos_dict[robot_name].append(qpos.copy())
 
-        
-        
+        # Save qpos to disk as npy files
+        save_dir = Path(__file__).parent.resolve() / "qpos"
+        save_dir.mkdir(parents=True, exist_ok=True)
+        for robot_name, qpos_list in qpos_dict.items():
+            qpos_arr = np.stack(qpos_list, axis=0)
+            np.save(save_dir / f"{str(robot_name).split('.')[-1]}_seq_{data_id}_from_{start_frame}_qpos.npy", qpos_arr)
+
