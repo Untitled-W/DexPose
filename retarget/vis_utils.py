@@ -31,12 +31,10 @@ from plotly.colors import get_colorscale
 import plotly.graph_objects as go
 import plotly.offline as pyo
 import open3d as o3d
-from manotorch.manolayer import ManoLayer
-
+# from manotorch.manolayer import ManoLayer
+from mano_layer import ManoLayer
 
 import sys; sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from utils import cosine_similarity, farthest_point_sampling
-from base import HumanSequenceData, DexSequenceData
 
 
 def arange_pixels(
@@ -909,47 +907,5 @@ def vis_frames_plotly(pc_ls:List[np.ndarray]=None, hand_pts_ls:List[np.ndarray]=
         fig.write_html('temp_vis.html')
         webbrowser.open('temp_vis.html')
         os.remove('temp_vis.html')
-
-
-def visualize_human_sequence(seq_data: HumanSequenceData, filename: Optional[str] = None):
-    
-    # Example: extract hand and object data for visualization
-    obj_mesh = []
-    for mesh_path in seq_data.object_mesh_path:
-        if os.path.exists(mesh_path):
-            obj_mesh.append(o3d.io.read_triangle_mesh(mesh_path))
-        else:
-            obj_mesh.append(None)
-    original_pc = [np.asarray(mesh.vertices) for mesh in obj_mesh if mesh is not None]
-
-    original_pc_ls = [
-            farthest_point_sampling(torch.from_numpy(points).unsqueeze(0), 1000)[:1000]  for points in original_pc
-        ]
-    pc_ds = [pc[pc_idx] for pc, pc_idx in zip(original_pc, original_pc_ls)]
-
-    if seq_data.which_dataset == 'TACO':
-        for i in range(len(pc_ds)):
-            pc_ds[i] *= 0.01
-
-    obj_pc = [] # should be (T, N, 3) of len k
-    for pc, obj_trans in zip(pc_ds, seq_data.obj_poses):
-        t_frame_pc = []
-        for t_trans in obj_trans:
-            t_frame_pc.append(pt_transform(pc, t_trans.cpu().numpy()))
-        obj_pc.append(np.array(t_frame_pc))
-    pc_ls = []
-    for t in range(len(seq_data.hand_tsls)):
-        pc_ls.append(np.concatenate([pc[t] for pc in obj_pc], axis=0))
-    pc_ls = [np.asarray(pc_ls)] # should be a list, len 1, (T, N, 3)
-
-    mano_hand_joints, hand_mesh = _extract_hand_points_and_mesh(seq_data.hand_tsls, seq_data.hand_coeffs, seq_data.side)
-
-    # Visualize using vis_frames_plotly
-    vis_frames_plotly(
-        pc_ls=pc_ls,
-        gt_hand_joints=mano_hand_joints, # should be a tensor, (T, 21, 3)
-        show_axis=True,
-        filename=filename if filename else None
-    )
 
 

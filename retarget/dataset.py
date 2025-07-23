@@ -183,6 +183,9 @@ class DexYCBVideoDataset:
         object_pose = pose["pose_y"]
         ycb_ids = meta["ycb_ids"]
 
+        ycb_ids = [ycb_ids[meta['ycb_grasp_ind']]]
+        object_pose = object_pose[:, meta['ycb_grasp_ind'], :]
+
         # Load extrinsic and mano parameters
         extrinsic_name = meta["extrinsics"]
         extrinsic_mat = np.array(
