@@ -39,7 +39,8 @@ def viz_hand_object(robots: Optional[Tuple[RobotName]], data_root: Path, fps: in
         if "pose" not in key:
             print(f"{key}: {value}")
     viewer.load_object_hand(sampled_data)
-    viewer.render_dexycb_data(sampled_data, data_id, fps)
+    viewer.retarget_and_save(sampled_data, data_id)
+    # viewer.render_dexycb_data(sampled_data, data_id, fps)
 
 
 def main(dexycb_dir: str, robots: Optional[List[RobotName]] = None, fps: int = 10):
