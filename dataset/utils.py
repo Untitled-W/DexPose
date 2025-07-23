@@ -72,3 +72,24 @@ def cosine_similarity_batch(a, b, batch_size=30000):
     return similarity_matrix
 
 
+
+def farthest_point_sampling(pos: torch.FloatTensor, n_sampling: int):
+  bz, N = pos.size(0), pos.size(1)
+  feat_dim = pos.size(-1)
+  device = pos.device
+  sampling_ratio = float(n_sampling / N)
+  pos_float = pos.float()
+
+  batch = torch.arange(bz, dtype=torch.long).view(bz, 1).to(device)
+  mult_one = torch.ones((N,), dtype=torch.long).view(1, N).to(device)
+
+  batch = batch * mult_one
+  batch = batch.view(-1)
+  pos_float = pos_float.contiguous().view(-1, feat_dim).contiguous() # (bz x N, 3)
+  # sampling_ratio = torch.tensor([sampling_ratio for _ in range(bz)], dtype=torch.float).to(device)
+  # batch = torch.zeros((N, ), dtype=torch.long, device=device)
+  sampled_idx = fps(pos_float, batch, ratio=sampling_ratio, random_start=True)
+  # shape of sampled_idx?
+  return sampled_idx
+  
+  

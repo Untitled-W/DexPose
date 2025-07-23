@@ -21,7 +21,7 @@ from pytorch3d.transforms import (
 import sys; sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from base import BaseDatasetProcessor, DatasetRegistry, HumanSequenceData, ORIGIN_DATA_PATH, HUMAN_SEQ_PATH
 from utils import apply_transformation_pt
-
+from vis_utils import visualize_human_sequence
 
 
 # Oakinkv2Processor
@@ -266,8 +266,6 @@ class OAKINKv2Processor(BaseDatasetProcessor):
         raw_data['mesh_path'] = '$'.join(mesh_paths)
         
         return obj_transf_list, obj_names, mesh_paths
-    
-
 
 
 # TacoProcessor
@@ -437,7 +435,6 @@ class TACOProcessor(BaseDatasetProcessor):
         verb = raw_data['action_verb']
         obj_name = raw_data['obj_real_name']
         return f"{verb} the {obj_name}"
-
 
 
 # Dataset configurations
@@ -629,7 +626,30 @@ def show_human_statistics(human_data: List[HumanSequenceData]):
 
     print()
 
+def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
+    """
+    Check data correctness by visualizing a few sequences.
+    
+    Args:
+        human_data: List of HumanSequenceData objects
+    """
+    import random
+    from vis_utils import visualize_human_sequence
+    
+    dataset_data = {}
+    for data in human_data:
+        dataset_name = data.which_dataset
+        if dataset_name not in dataset_data:
+            dataset_data[dataset_name] = []
+        dataset_data[dataset_name].append(data)
 
+    for dataset_name, data_list in dataset_data.items():
+        print(f"Dataset {dataset_name} has {len(data_list)} sequences")
+        # Sample a few sequences for visualization
+        sampled_data = random.sample(data_list, 10)
+        for d in sampled_data:
+            print(f"Visualizing sequence {d.which_sequence}")
+            visualize_human_sequence(d, f'logs/{d.which_dataset}_{d.which_sequence}.html')
 
 if __name__ == "__main__":
 
@@ -646,5 +666,6 @@ if __name__ == "__main__":
                 data = pickle.load(f)
                 processed_data.extend(data)
 
-    # show human hand statistics
-    show_human_statistics(processed_data)
+    # show_human_statistics(processed_data)
+    
+    check_data_correctness_by_vis(processed_data)
