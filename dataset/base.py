@@ -12,6 +12,7 @@ import open3d as o3d
 from tqdm import tqdm
 from manotorch.manolayer import ManoLayer
 
+
 ORIGIN_DATA_PATH = {
     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco",
     "Oakinkv2": '/home/qianxu/Desktop/New_Folder/OakInk2/OakInk-v2-hub',
