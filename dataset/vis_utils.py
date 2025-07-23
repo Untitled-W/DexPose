@@ -31,10 +31,11 @@ from plotly.colors import get_colorscale
 import plotly.graph_objects as go
 import plotly.offline as pyo
 import open3d as o3d
+from manotorch.manolayer import ManoLayer
 
 
 import sys; sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from utils import cosine_similarity
+from utils import cosine_similarity, farthest_point_sampling
 from base import HumanSequenceData, DexSequenceData
 import trimesh
 
@@ -407,8 +408,8 @@ def _extract_hand_points_and_mesh(hand_tsls, hand_coeffs, side):
     else:
         mano_layer = ManoLayer(center_idx=0, side='right', rot_mode="quat", use_pca=False).cuda()
 
-    hand_joints = mano_layer(hand_coeffs)['joints'].cpu().numpy()
-    hand_joints += hand_tsls[:,None,:]
+    hand_joints = mano_layer(hand_coeffs).joints.cpu().numpy()
+    hand_joints += hand_tsls.cpu().numpy()[:,None,:]
     
     return hand_joints, None
     
@@ -827,6 +828,7 @@ def vis_frames_plotly(pc_ls:List[np.ndarray]=None, hand_pts_ls:List[np.ndarray]=
     """
     visulize everything as frames in plotly
     """
+    print(len(pc_ls), pc_ls[0].shape)
     if hand_mesh is not None:
         T = len(hand_mesh)
     else:
@@ -903,24 +905,15 @@ def vis_frames_plotly(pc_ls:List[np.ndarray]=None, hand_pts_ls:List[np.ndarray]=
     if filename is not None:
         fig.write_html(f'{filename}.html')
     else:
-        fig.show()
+        # fig.show()
+        import webbrowser
+        fig.write_html('temp_vis.html')
+        webbrowser.open('temp_vis.html')
+        os.remove('temp_vis.html')
 
 
-def visualize_human_sequence(seq_data: HumanSequenceData):
+def visualize_human_sequence(seq_data: HumanSequenceData, filename: Optional[str] = None):
     
-    # HumanSequenceData fields:
-    # - hand_tsls: torch.Tensor (T x 3)
-    # - hand_coeffs: torch.Tensor (T x 64)
-    # - side: int
-    # - obj_poses: torch.Tensor (K x T x 4 x 4)
-    # - object_names: List[str]
-    # - object_mesh_path: List[str]
-    # - frame_indices: List[int]
-    # - task_description: str
-    # - which_dataset: str
-    # - which_sequence: str
-    # - extra_info: Optional[Dict[str, Any]]
-
     # Example: extract hand and object data for visualization
     obj_mesh = []
     for mesh_path in seq_data.object_mesh_path:
@@ -928,15 +921,28 @@ def visualize_human_sequence(seq_data: HumanSequenceData):
             obj_mesh.append(o3d.io.read_triangle_mesh(mesh_path))
         else:
             obj_mesh.append(None)
-    original_pc = [_extract_mesh_data(mesh)[0] for mesh in obj_mesh if mesh is not None]
-    
-    pc_ls = []
-    for obj_trans in seq_data.obj_poses:
+    original_pc = [np.asarray(mesh.vertices) for mesh in obj_mesh if mesh is not None]
+
+    original_pc_ls = [
+            farthest_point_sampling(torch.from_numpy(points).unsqueeze(0), 1000)[:1000]  for points in original_pc
+        ]
+    pc_ds = [pc[pc_idx] for pc, pc_idx in zip(original_pc, original_pc_ls)]
+
+    if seq_data.which_dataset == 'TACO':
+        for i in range(len(pc_ds)):
+            pc_ds[i] *= 0.01
+
+    obj_pc = [] # should be (T, N, 3) of len k
+    for pc, obj_trans in zip(pc_ds, seq_data.obj_poses):
         t_frame_pc = []
-        for pc, t_trans in zip(original_pc, obj_trans):
-            t_frame_pc.extend(pt_transform(pc, t_trans))
-        pc_ls.append(np.array(t_frame_pc))
-    
+        for t_trans in obj_trans:
+            t_frame_pc.append(pt_transform(pc, t_trans.cpu().numpy()))
+        obj_pc.append(np.array(t_frame_pc))
+    pc_ls = []
+    for t in range(len(seq_data.hand_tsls)):
+        pc_ls.append(np.concatenate([pc[t] for pc in obj_pc], axis=0))
+    pc_ls = [np.asarray(pc_ls)] # should be (T, N, 3) of len 1
+
     mano_hand_joints, hand_mesh = _extract_hand_points_and_mesh(seq_data.hand_tsls, seq_data.hand_coeffs, seq_data.side)
 
     # Visualize using vis_frames_plotly
@@ -944,6 +950,8 @@ def visualize_human_sequence(seq_data: HumanSequenceData):
         pc_ls=pc_ls,
         gt_hand_joints=mano_hand_joints,
         hand_mesh=hand_mesh,
-        obj_mesh=obj_mesh,
         show_axis=True,
+        filename=filename if filename else None
     )
+
+
