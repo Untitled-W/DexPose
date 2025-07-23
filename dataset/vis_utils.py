@@ -36,6 +36,7 @@ import open3d as o3d
 import sys; sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from utils import cosine_similarity
 from base import HumanSequenceData, DexSequenceData
+import trimesh
 
 
 def arange_pixels(
@@ -399,6 +400,18 @@ def _extract_mesh_data(mesh: Union[Meshes, Dict]) -> Tuple[np.ndarray, np.ndarra
     else:
         raise ValueError("Unsupported mesh format. Use PyTorch3D Meshes or dict with 'vertices' and 'faces' keys")
 
+
+def _extract_hand_points_and_mesh(hand_tsls, hand_coeffs, side):
+    if side == 0:
+        mano_layer = ManoLayer(center_idx=0, side='left', rot_mode="quat", use_pca=False).cuda()
+    else:
+        mano_layer = ManoLayer(center_idx=0, side='right', rot_mode="quat", use_pca=False).cuda()
+
+    hand_joints = mano_layer(hand_coeffs)['joints'].cpu().numpy()
+    hand_joints += hand_tsls[:,None,:]
+    
+    return hand_joints, None
+    
 
 def get_vis_hand_keypoints_with_color_gradient_and_lines(gt_posi_pts: np.ndarray, color_scale='Viridis', finger_groups=None, emphasize_idx=None):
     """
@@ -893,4 +906,44 @@ def vis_frames_plotly(pc_ls:List[np.ndarray]=None, hand_pts_ls:List[np.ndarray]=
         fig.show()
 
 
+def visualize_human_sequence(seq_data: HumanSequenceData):
     
+    # HumanSequenceData fields:
+    # - hand_tsls: torch.Tensor (T x 3)
+    # - hand_coeffs: torch.Tensor (T x 64)
+    # - side: int
+    # - obj_poses: torch.Tensor (K x T x 4 x 4)
+    # - object_names: List[str]
+    # - object_mesh_path: List[str]
+    # - frame_indices: List[int]
+    # - task_description: str
+    # - which_dataset: str
+    # - which_sequence: str
+    # - extra_info: Optional[Dict[str, Any]]
+
+    # Example: extract hand and object data for visualization
+    obj_mesh = []
+    for mesh_path in seq_data.object_mesh_path:
+        if os.path.exists(mesh_path):
+            obj_mesh.append(o3d.io.read_triangle_mesh(mesh_path))
+        else:
+            obj_mesh.append(None)
+    original_pc = [_extract_mesh_data(mesh)[0] for mesh in obj_mesh if mesh is not None]
+    
+    pc_ls = []
+    for obj_trans in seq_data.obj_poses:
+        t_frame_pc = []
+        for pc, t_trans in zip(original_pc, obj_trans):
+            t_frame_pc.extend(pt_transform(pc, t_trans))
+        pc_ls.append(np.array(t_frame_pc))
+    
+    mano_hand_joints, hand_mesh = _extract_hand_points_and_mesh(seq_data.hand_tsls, seq_data.hand_coeffs, seq_data.side)
+
+    # Visualize using vis_frames_plotly
+    vis_frames_plotly(
+        pc_ls=pc_ls,
+        gt_hand_joints=mano_hand_joints,
+        hand_mesh=hand_mesh,
+        obj_mesh=obj_mesh,
+        show_axis=True,
+    )
