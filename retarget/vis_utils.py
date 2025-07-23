@@ -399,17 +399,6 @@ def _extract_mesh_data(mesh: Union[Meshes, Dict]) -> Tuple[np.ndarray, np.ndarra
         raise ValueError("Unsupported mesh format. Use PyTorch3D Meshes or dict with 'vertices' and 'faces' keys")
 
 
-def _extract_hand_points_and_mesh(hand_tsls, hand_coeffs, side):
-    if side == 0:
-        mano_layer = ManoLayer(center_idx=0, side='left', rot_mode="quat", use_pca=False).cuda()
-    else:
-        mano_layer = ManoLayer(center_idx=0, side='right', rot_mode="quat", use_pca=False).cuda()
-
-    hand_joints = mano_layer(hand_coeffs).joints.cpu().numpy()
-    hand_joints += hand_tsls.cpu().numpy()[:,None,:]
-    
-    return hand_joints, None
-    
 
 def get_vis_hand_keypoints_with_color_gradient_and_lines(gt_posi_pts: np.ndarray, color_scale='Viridis', finger_groups=None, emphasize_idx=None):
     """
@@ -830,7 +819,9 @@ def vis_frames_plotly(pc_ls:List[np.ndarray]=None, hand_pts_ls:List[np.ndarray]=
         T = len(hand_mesh)
     else:
         T = pc_ls[0].shape[0] if pc_ls is not None else gt_hand_joints.shape[0]
-    initial_data = vis_pc_coor_plotly(pc_ls=get_subitem(pc_ls, 0), hand_pts_ls=get_subitem(hand_pts_ls, 0), 
+        
+    initial_data = vis_pc_coor_plotly(pc_ls=get_subitem(pc_ls, 0), 
+                                      hand_pts_ls=get_subitem(hand_pts_ls, 0), 
                                       transformation_ls=get_subitem(transformation_ls, 0), 
                                       gt_transformation_ls=get_subitem(gt_transformation_ls, 0),
                                         gt_posi_pts=get_subitem(gt_posi_pts, 0), posi_pts_ls=get_subitem(posi_pts_ls, 0),
@@ -840,7 +831,8 @@ def vis_frames_plotly(pc_ls:List[np.ndarray]=None, hand_pts_ls:List[np.ndarray]=
                                         return_data=True, )
     frames = []
     for t in range(T):
-        data = vis_pc_coor_plotly(pc_ls=get_subitem(pc_ls, t), hand_pts_ls=get_subitem(hand_pts_ls, t), 
+        data = vis_pc_coor_plotly(pc_ls=get_subitem(pc_ls, t), 
+                                  hand_pts_ls=get_subitem(hand_pts_ls, t), 
                                   transformation_ls=get_subitem(transformation_ls, t), 
                                   gt_transformation_ls=get_subitem(gt_transformation_ls, t),
                                     gt_posi_pts=get_subitem(gt_posi_pts, t), posi_pts_ls=get_subitem(posi_pts_ls, t),
@@ -909,3 +901,204 @@ def vis_frames_plotly(pc_ls:List[np.ndarray]=None, hand_pts_ls:List[np.ndarray]=
         os.remove('temp_vis.html')
 
 
+def get_vis_dex_keypoints_with_color_gradient_and_lines(gt_posi_pts: np.ndarray, finger_groups, color_scale='Viridis', emphasize_idx=None):
+    """
+    Visualize the dex hand key points with different colors for different fingers,
+    decreasing opacity based on the distance from the root point, and add lines
+    connecting points within each finger and from the root to the root of each finger.
+
+    Args:
+        gt_posi_pts (np.ndarray): Ground truth position points (21 hand keypoints)
+        color_scale (str): The color scale to use (e.g., 'Viridis')
+    """
+
+    # Get colors from the specified color scale
+    color_scale_vals = get_colorscale(color_scale)
+
+    data = []
+    
+    for i, (finger_name, indices) in enumerate(finger_groups.items()):
+        # Get a color for this finger from the color scale
+        finger_color = color_scale_vals[i % len(color_scale_vals)]
+
+        # Add points and lines within each finger
+        for j, idx in enumerate(indices):
+            # Calculate the opacity based on the distance from the root (first point in the group)
+            opacity = 1.0 - (j / (len(indices)))  # Linear decrease in opacity
+
+            # Add the keypoint with the appropriate color and opacity
+            if emphasize_idx is not None and idx == emphasize_idx:
+                data.append(go.Scatter3d(
+                    x=[gt_posi_pts[idx, 0]], 
+                    y=[gt_posi_pts[idx, 1]], 
+                    z=[gt_posi_pts[idx, 2]], 
+                    mode='markers', 
+                    marker=dict(size=15, color='green', opacity=1), 
+                    name=f"{finger_name} {j+1}",
+                    showlegend=False
+                ))
+            else:
+                data.append(go.Scatter3d(
+                    x=[gt_posi_pts[idx, 0]], 
+                    y=[gt_posi_pts[idx, 1]], 
+                    z=[gt_posi_pts[idx, 2]], 
+                    mode='markers', 
+                    marker=dict(size=10, color=finger_color[1], opacity=opacity), 
+                    name=f"{finger_name} {j+1}",
+                    showlegend=False
+                ))
+
+            # Add lines between points within the finger
+            if j > 0:
+                prev_idx = indices[j - 1]
+                data.append(go.Scatter3d(
+                    x=[gt_posi_pts[prev_idx, 0], gt_posi_pts[idx, 0]], 
+                    y=[gt_posi_pts[prev_idx, 1], gt_posi_pts[idx, 1]], 
+                    z=[gt_posi_pts[prev_idx, 2], gt_posi_pts[idx, 2]], 
+                    mode='lines', 
+                    line=dict(color=finger_color[1], width=10),
+                    name=f"{finger_name} Line {j}",
+                    showlegend=False
+                ))
+
+        # Add lines from the root (index 0) to the root of each finger (index 5, 9, 13, 17)
+        if indices[0] != 0:
+            data.append(go.Scatter3d(
+                x=[gt_posi_pts[0, 0], gt_posi_pts[indices[0], 0]], 
+                y=[gt_posi_pts[0, 1], gt_posi_pts[indices[0], 1]], 
+                z=[gt_posi_pts[0, 2], gt_posi_pts[indices[0], 2]], 
+                mode='lines', 
+                line=dict(color=finger_color[1], width=12,), 
+                name=f"Root to {finger_name}",
+                showlegend=False
+            ))
+    return data
+
+
+def vis_dex_pc_coor_plotly(pc_ls: List[np.ndarray] = None, 
+                            gt_hand_joints: np.ndarray = None, 
+                            finger_groups: dict = None,
+                            show_axis: bool = False, 
+                            filename: str = None) -> None:
+    """
+    Visualize point clouds and ground truth hand joints in Plotly.
+    
+    Args:
+        pc_ls (List[np.ndarray]): List of point clouds.
+        gt_hand_joints (np.ndarray): Ground truth hand joints.
+        show_axis (bool): Whether to show axis in the visualization.
+        filename (str): Filename to save the visualization.
+    """
+    data = []
+
+    if pc_ls is not None:
+        for i, pc in enumerate(pc_ls):
+            data.append(go.Scatter3d(
+                x=pc[:, 0], y=pc[:, 1], z=pc[:, 2],
+                mode='markers',
+                marker=dict(size=5, color='purple'),
+                name=f"Point Cloud {i+1}"
+            ))
+
+    if gt_hand_joints is not None:
+        data.extend(get_vis_dex_keypoints_with_color_gradient_and_lines(gt_hand_joints, finger_groups,color_scale='Bluered'))
+
+    fig = go.Figure(data=data)
+    fig.update_layout(scene=dict(
+        aspectmode='data',
+        xaxis_visible=show_axis,
+        yaxis_visible=show_axis,
+        zaxis_visible=show_axis,
+        xaxis=dict(backgroundcolor="rgba(0,0,0,0)"),
+        yaxis=dict(backgroundcolor="rgba(0,0,0,0)"),
+        zaxis=dict(backgroundcolor="rgba(0,0,0,0)")
+    ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)")
+
+    if filename is not None:
+        fig.write_html(f'{filename}.html')
+    else:
+        fig.show()
+
+
+def vis_dex_frames_plotly(pc_ls: List[np.ndarray] = None, 
+                          gt_hand_joints: np.ndarray = None, 
+                          finger_groups: dict = None,
+                          show_axis: bool = False, 
+                          filename: str = None):
+    """
+    Visualize point clouds and ground truth hand joints as frames in Plotly.
+    """
+    print(len(pc_ls), pc_ls[0].shape)
+    T = len(pc_ls) if pc_ls is not None else gt_hand_joints.shape[0]
+
+    initial_data = vis_dex_pc_coor_plotly(pc_ls=get_subitem(pc_ls, 0), 
+                                        gt_hand_joints=get_subitem(gt_hand_joints, 0),
+                                        finger_groups=finger_groups,
+                                        show_axis=show_axis,
+                                        return_data=True)
+    frames = []
+    for t in range(T):
+        data = vis_dex_pc_coor_plotly(pc_ls=get_subitem(pc_ls, t), 
+                                    gt_hand_joints=get_subitem(gt_hand_joints, t),
+                                    finger_groups=finger_groups,
+                                    show_axis=show_axis,
+                                    return_data=True)
+        frames.append(go.Frame(data=data, name=f"Frame {t}"))
+
+    slider_steps = []
+    for t in range(T):
+        step = {
+            'args': [[f"Frame {t}"], {'frame': {'duration': 0, 'redraw': True}, 'mode': 'immediate', 'transition': {'duration': 0}}],
+            'label': f"{t}",
+            'method': 'animate'
+        }
+        slider_steps.append(step)
+
+    layout = go.Layout(
+        scene=dict(
+            aspectmode='data',
+            xaxis_visible=show_axis,
+            yaxis_visible=show_axis,
+            zaxis_visible=show_axis,
+            xaxis=dict(backgroundcolor="rgba(0,0,0,0)"),
+            yaxis=dict(backgroundcolor="rgba(0,0,0,0)"),
+            zaxis=dict(backgroundcolor="rgba(0,0,0,0)")
+        ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        updatemenus=[{
+            'type': 'buttons',
+            'buttons': [
+                {'label': 'Play', 'method': 'animate', 'args': [None, {'frame': {'duration': 100, 'redraw': True}, 'fromcurrent': True, 'mode': 'immediate'}]},
+                {'label': 'Pause', 'method': 'animate', 'args': [[None], {'frame': {'duration': 0, 'redraw': False}, 'mode': 'immediate'}]},
+            ]
+        }],
+        sliders=[{
+            'active': 0,
+            'yanchor': 'top',
+            'xanchor': 'left',
+            'currentvalue': {
+                'font': {'size': 20},
+                'prefix': 'Frame:',
+                'visible': True,
+                'xanchor': 'right'
+            },
+            'transition': {'duration': 0},
+            'pad': {'b': 10, 't': 50},
+            'len': 0.9,
+            'x': 0.1,
+            'y': 0,
+            'steps': slider_steps
+        }]
+    )
+
+    fig = go.Figure(data=initial_data, layout=layout, frames=frames)
+    if filename is not None:
+        fig.write_html(f'{filename}.html')
+    else:
+        import webbrowser
+        fig.write_html('temp_vis.html')
+        webbrowser.open('temp_vis.html')
+        os.remove('temp_vis.html')

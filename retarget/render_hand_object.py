@@ -17,7 +17,7 @@ from dex_retargeting.constants import RobotName, HandType
 from dex_retargeting.retargeting_config import RetargetingConfig
 from hand_robot_viewer import RobotHandDatasetSAPIENViewer
 from hand_viewer import HandDatasetSAPIENViewer
-from vis_utils import vis_frames_plotly
+from vis_utils import vis_dex_frames_plotly
 
 import warnings; warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -106,15 +106,16 @@ def main(dexycb_dir: str, robots: Optional[List[RobotName]] = None, fps: int = 1
 
 def test(robot_name: Optional[List[RobotName]] = RobotName.allegro, dexycb_dir: str = '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data', hand_type: str = "right", fps: int = 10):
 
+    robot_name_str = str(robot_name).split(".")[-1]
     data_root = Path(dexycb_dir).absolute()
     dataset = DexYCBVideoDataset(data_root, hand_type=hand_type)
 
     data_id = 4
     sampled_data = dataset[data_id]
 
-    def load_robot(robot_name: RobotName, side):
+    def load_robot(robot_name_str: str, side):
 
-        urdf_files = f'/home/qianxu/Desktop/Project/DexPose/retarget/urdf/{str(robot_name).split(".")[-1]}_hand_{side}_glb.urdf'
+        urdf_files = f'/home/qianxu/Desktop/Project/DexPose/retarget/urdf/{robot_name_str}_hand_{side}_glb.urdf'
 
         # Load the URDF file for the robot
         with open(urdf_files, 'rb') as f:
@@ -122,6 +123,18 @@ def test(robot_name: Optional[List[RobotName]] = RobotName.allegro, dexycb_dir: 
 
         # Construct the kinematic chain from the URDF
         robot_chain = pk.build_chain_from_urdf(urdf_str)
+        
+        for i, jt in enumerate(robot_chain.get_joint_parameter_names()):
+            print(i, jt)
+        robot_chain.print_tree()
+        
+        for joint_name in robot_chain.get_joint_parameter_names():
+            for link in robot_chain.links:
+                if link.joint.name == joint_name:
+                    parent_link = link.parent
+                    child_link = link.name
+                    print(f"{joint_name}: {parent_link} - {child_link}")
+                    break
 
         return robot_chain
 
@@ -141,9 +154,21 @@ def test(robot_name: Optional[List[RobotName]] = RobotName.allegro, dexycb_dir: 
 
         return pc_ds[0] # only 1 object in the dataset
 
-    robot_chain = load_robot(robot_name, hand_type)
+    def get_finger_group(robot_name_str: str):
+        if robot_name_str == "allegro":
+            return {
+                "finger 1": [0, 1, 2, 3],
+                "finger 2": [4, 5, 6, 7],
+                "finger 3": [8, 9, 10, 11],
+                "finger 4": [12, 13, 14, 15],
+            }
+        else:
+            raise ValueError(f"Finger group for {robot_name_str} not defined.")
 
-    qpos_file = f'/home/qianxu/Desktop/Project/DexPose/retarget/hand_qpos/{str(robot_name).split(".")[-1]}_seq_{data_id}_from_0_qpos.npy'
+    robot_chain = load_robot(robot_name, hand_type)
+    finger_groups = get_finger_group(str(robot_name))
+
+    qpos_file = f'/home/qianxu/Desktop/Project/DexPose/retarget/hand_qpos/{robot_name_str}_seq_{data_id}_from_0_qpos.npy'
     qpos = np.load(qpos_file)
 
     keypoints =[]
@@ -164,9 +189,10 @@ def test(robot_name: Optional[List[RobotName]] = RobotName.allegro, dexycb_dir: 
         transformed_pc = pt_transform(pc, transformation)
         pc_ls.append(transformed_pc)
 
-    vis_frames_plotly(
+    vis_dex_frames_plotly(
         pc_ls=pc_ls,
         gt_hand_joints=hand_joints,
+        finger_groups=finger_groups,
         show_axis=True,
         filename="test"
     )    
