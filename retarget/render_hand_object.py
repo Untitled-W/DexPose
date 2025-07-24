@@ -177,7 +177,7 @@ def test(robot_name: Optional[List[RobotName]] = RobotName.allegro, dexycb_dir: 
  
     robot = load_robot(robot_name, hand_type)
 
-    qpos_file = f'/home/qianxu/Desktop/Project/DexPose/retarget/hand_qpos/{robot_name_str}_seq_{data_id}_from_0_qpos.npy'
+    qpos_file = f'/home/qianxu/Desktop/Project/DexPose/retarget/hand_qpos/{str(robot_name).split(".")[-1]}_seq_{data_id}_from_0_qpos.npy'
     qpos = np.load(qpos_file)
 
     ### hand meshes ###
