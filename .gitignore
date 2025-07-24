@@ -2,6 +2,8 @@ data/*
 logs
 urdf
 hand_qpos
+test.py
+*.urdf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

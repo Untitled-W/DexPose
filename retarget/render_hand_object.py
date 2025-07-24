@@ -17,6 +17,8 @@ from dex_retargeting.constants import RobotName, HandType
 from dex_retargeting.retargeting_config import RetargetingConfig
 from hand_robot_viewer import RobotHandDatasetSAPIENViewer
 from hand_viewer import HandDatasetSAPIENViewer
+from mano_layer import MANOLayer
+from hand_model import HandModelURDF
 from vis_utils import vis_dex_frames_plotly
 
 import warnings; warnings.filterwarnings("ignore", category=UserWarning)
@@ -104,6 +106,65 @@ def main(dexycb_dir: str, robots: Optional[List[RobotName]] = None, fps: int = 1
     viz_hand_object(robots, data_root, fps)
 
 
+
+
+
+def load_robot(robot_name_str: str, side):
+
+    urdf_files = f'/home/qianxu/Desktop/Project/DexPose/retarget/urdf/{robot_name_str}_hand_{side}_glb.urdf'
+
+    # Load the URDF file for the robot
+    with open(urdf_files, 'rb') as f:
+        urdf_str = f.read()
+
+    # Construct the kinematic chain from the URDF
+    robot_chain = pk.build_chain_from_urdf(urdf_str)
+    
+    for i, jt in enumerate(robot_chain.get_joint_parameter_names()):
+        print(i, jt)
+    robot_chain.print_tree()
+    
+    for joint_name in robot_chain.get_joint_parameter_names():
+        for link in robot_chain.links:
+            if link.joint.name == joint_name:
+                parent_link = link.parent
+                child_link = link.name
+                print(f"{joint_name}: {parent_link} - {child_link}")
+                break
+
+    return robot_chain
+
+def get_point_clouds(data: dict):
+    ycb_mesh_files = data["object_mesh_file"] # a list of .obj file path
+    meshes = []
+    for mesh_file in ycb_mesh_files:
+        mesh = o3d.io.read_triangle_mesh(mesh_file)
+        meshes.append(mesh)
+    
+    original_pc = [np.asarray(mesh.vertices) for mesh in meshes if mesh is not None]
+
+    original_pc_ls = [
+            farthest_point_sampling(torch.from_numpy(points).unsqueeze(0), 1000)[:1000]  for points in original_pc
+        ]
+    pc_ds = [pc[pc_idx] for pc, pc_idx in zip(original_pc, original_pc_ls)]
+
+    return pc_ds[0] # only 1 object in the dataset
+
+def compute_hand_geometry(hand_pose_frame, mano_layer):
+    # pose parameters all zero, no hand is detected
+    if np.abs(hand_pose_frame).sum() < 1e-5:
+        return None, None
+    p = torch.from_numpy(hand_pose_frame[:, :48].astype(np.float32))
+    t = torch.from_numpy(hand_pose_frame[:, 48:51].astype(np.float32))
+    vertex, joint = mano_layer(p, t)
+    vertex = vertex.cpu().numpy()[0]
+    joint = joint.cpu().numpy()[0]
+
+    return joint
+
+
+
+
 def test(robot_name: Optional[List[RobotName]] = RobotName.allegro, dexycb_dir: str = '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data', hand_type: str = "right", fps: int = 10):
 
     robot_name_str = str(robot_name).split(".")[-1]
@@ -113,71 +174,20 @@ def test(robot_name: Optional[List[RobotName]] = RobotName.allegro, dexycb_dir: 
     data_id = 4
     sampled_data = dataset[data_id]
 
-    def load_robot(robot_name_str: str, side):
-
-        urdf_files = f'/home/qianxu/Desktop/Project/DexPose/retarget/urdf/{robot_name_str}_hand_{side}_glb.urdf'
-
-        # Load the URDF file for the robot
-        with open(urdf_files, 'rb') as f:
-            urdf_str = f.read()
-
-        # Construct the kinematic chain from the URDF
-        robot_chain = pk.build_chain_from_urdf(urdf_str)
-        
-        for i, jt in enumerate(robot_chain.get_joint_parameter_names()):
-            print(i, jt)
-        robot_chain.print_tree()
-        
-        for joint_name in robot_chain.get_joint_parameter_names():
-            for link in robot_chain.links:
-                if link.joint.name == joint_name:
-                    parent_link = link.parent
-                    child_link = link.name
-                    print(f"{joint_name}: {parent_link} - {child_link}")
-                    break
-
-        return robot_chain
-
-    def get_point_clouds(data: dict):
-        ycb_mesh_files = data["object_mesh_file"] # a list of .obj file path
-        meshes = []
-        for mesh_file in ycb_mesh_files:
-            mesh = o3d.io.read_triangle_mesh(mesh_file)
-            meshes.append(mesh)
-        
-        original_pc = [np.asarray(mesh.vertices) for mesh in meshes if mesh is not None]
-
-        original_pc_ls = [
-                farthest_point_sampling(torch.from_numpy(points).unsqueeze(0), 1000)[:1000]  for points in original_pc
-            ]
-        pc_ds = [pc[pc_idx] for pc, pc_idx in zip(original_pc, original_pc_ls)]
-
-        return pc_ds[0] # only 1 object in the dataset
-
-    def get_finger_group(robot_name_str: str):
-        if robot_name_str == "allegro":
-            return {
-                "finger 1": [0, 1, 2, 3],
-                "finger 2": [4, 5, 6, 7],
-                "finger 3": [8, 9, 10, 11],
-                "finger 4": [12, 13, 14, 15],
-            }
-        else:
-            raise ValueError(f"Finger group for {robot_name_str} not defined.")
-
-    robot_chain = load_robot(robot_name, hand_type)
-    finger_groups = get_finger_group(str(robot_name))
+ 
+    robot = load_robot(robot_name, hand_type)
 
     qpos_file = f'/home/qianxu/Desktop/Project/DexPose/retarget/hand_qpos/{robot_name_str}_seq_{data_id}_from_0_qpos.npy'
     qpos = np.load(qpos_file)
 
-    keypoints =[]
-    # Iterate through the qpos and compute the forward kinematics
+    ### hand meshes ###
+    hand_meshes = []
     for i in range(qpos.shape[0]):
-        ret = robot_chain.forward_kinematics(qpos[i])
-        keypoints.append([i._matrix[:, :3, 3] for i in list(ret.values())[6:]])
-    hand_joints = np.array(keypoints)
-
+        robot.set_qpos(qpos[i])
+        hand_mesh = robot.get_hand_mesh()
+        hand_meshes.append(hand_mesh)
+        
+    ### point clouds ###
     pc = get_point_clouds(sampled_data)
     object_pose = sampled_data["object_pose"] # T x 7, 7=q+t, q=xyzw, t=xyz
     pc_ls = []
@@ -189,10 +199,19 @@ def test(robot_name: Optional[List[RobotName]] = RobotName.allegro, dexycb_dir: 
         transformed_pc = pt_transform(pc, transformation)
         pc_ls.append(transformed_pc)
 
+    ### hand joints ###
+    hand_joints = []
+    hand_pose_frame = sampled_data["hand_pose"]
+    mano_layer = MANOLayer(hand_type, np.zeros(10).astype(np.float32))
+    for i in range(hand_pose_frame.shape[0]):
+        joint = compute_hand_geometry(hand_pose_frame[i], mano_layer= mano_layer)
+        hand_joints.append(joint)
+    
+
     vis_dex_frames_plotly(
         pc_ls=pc_ls,
         gt_hand_joints=hand_joints,
-        finger_groups=finger_groups,
+        dex_mesh=hand_meshes,
         show_axis=True,
         filename="test"
     )    
