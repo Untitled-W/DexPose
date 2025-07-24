@@ -109,10 +109,11 @@ _BOP_EVAL_SUBSAMPLING_FACTOR = 4
 
 
 class DexYCBVideoDataset:
-    def __init__(self, data_dir, hand_type="right", filter_objects=[]):
+    def __init__(self, data_dir, hand_type="right", filter_objects=[], mode="full"):
         self._data_dir = Path(data_dir)
         self._calib_dir = self._data_dir / "calibration"
         self._model_dir = self._data_dir / "models"
+        self.mode = mode
 
         # Filter
         self.use_filter = len(filter_objects) > 0
@@ -183,8 +184,9 @@ class DexYCBVideoDataset:
         object_pose = pose["pose_y"]
         ycb_ids = meta["ycb_ids"]
 
-        ycb_ids = [ycb_ids[meta['ycb_grasp_ind']]]
-        object_pose = object_pose[:, meta['ycb_grasp_ind'], :]
+        if self.mode == "sub":
+            ycb_ids = [ycb_ids[meta['ycb_grasp_ind']]]
+            object_pose = object_pose[:, meta['ycb_grasp_ind'], :]
 
         # Load extrinsic and mano parameters
         extrinsic_name = meta["extrinsics"]

@@ -940,13 +940,13 @@ def visualize_human_sequence(seq_data: HumanSequenceData, filename: Optional[str
     pc_ls = []
     for t in range(len(seq_data.hand_tsls)):
         pc_ls.append(np.concatenate([pc[t] for pc in obj_pc], axis=0))
-    pc_ls = [np.asarray(pc_ls)] # should be a list, len 1, (T, N, 3)
+    pc_ls = [np.asarray(pc_ls)] 
 
     mano_hand_joints, hand_mesh = _extract_hand_points_and_mesh(seq_data.hand_tsls, seq_data.hand_coeffs, seq_data.side)
 
     # Visualize using vis_frames_plotly
     vis_frames_plotly(
-        pc_ls=pc_ls,
+        pc_ls=pc_ls, # should be a list, len 1, (T, N, 3)
         gt_hand_joints=mano_hand_joints, # should be a tensor, (T, 21, 3)
         show_axis=True,
         filename=filename if filename else None

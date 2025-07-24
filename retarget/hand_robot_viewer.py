@@ -5,9 +5,11 @@ from typing import Dict, List
 import cv2
 import numpy as np
 import sapien
+import torch
 from hand_viewer import HandDatasetSAPIENViewer
 from pytransform3d import rotations
 from tqdm import trange
+import pytorch_kinematics as pk
 
 from dex_retargeting import yourdfpy as urdf
 from dex_retargeting.constants import (
@@ -36,6 +38,7 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
         self.robot_file_names: List[str] = []
         self.retargetings: List[SeqRetargeting] = []
         self.retarget2sapien: List[np.ndarray] = []
+        self.retarget2pk: List[np.ndarray] = []
         self.hand_type = hand_type
 
         # Load optimizer and filter
@@ -74,7 +77,14 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             retarget2sapien = np.array(
                 [retargeting.joint_names.index(n) for n in sapien_joint_names]
             ).astype(int)
+
+            self.chain = pk.build_chain_from_urdf(open(temp_path, "rb").read()).to(dtype=torch.float)
+
+            retarget2pk = np.array(
+                [retargeting.joint_names.index(n) for n in self.chain.get_joint_parameter_names()]
+            )
             self.retarget2sapien.append(retarget2sapien)
+            self.retarget2pk.append(retarget2pk)
 
     def load_object_hand(self, data: Dict):
         super().load_object_hand(data)
@@ -223,6 +233,9 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             if i >= 1:
                 self.robots[i - 1].set_pose(pose)
 
+        # Prepare to save qpos
+        qpos_dict = {robot_name: [] for robot_name in self.robot_names}
+
         # Skip frames where human hand is not detected in DexYCB dataset
         start_frame = 0
         for i in range(0, num_frame):
@@ -249,9 +262,6 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 is_mano_convention=True,
             )
 
-        # Prepare to save qpos
-        qpos_dict = {robot_name: [] for robot_name in self.robot_names}
-
         # Loop rendering
         for i in trange(start_frame, num_frame):
             object_pose_frame = object_pose[i]
@@ -262,33 +272,35 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             for k in range(num_ycb_objects):
                 pos_quat = object_pose_frame[k]
 
-            # Quaternion convention: xyzw -> wxyz
-            pose = self.camera_pose * sapien.Pose(
-                pos_quat[4:], np.concatenate([pos_quat[3:4], pos_quat[:3]])
-            )
-            self.objects[k].set_pose(pose)
-            for copy_ind in range(num_copy):
-                self.objects[k + copy_ind * num_ycb_objects].set_pose(
-                pose_offsets[copy_ind] * pose
+                # Quaternion convention: xyzw -> wxyz
+                pose = self.camera_pose * sapien.Pose(
+                    pos_quat[4:], np.concatenate([pos_quat[3:4], pos_quat[:3]])
                 )
+                self.objects[k].set_pose(pose)
+                for copy_ind in range(num_copy):
+                    self.objects[k + copy_ind * num_ycb_objects].set_pose(
+                    pose_offsets[copy_ind] * pose
+                    )
 
             # Update pose for human hand
             self._update_hand(vertex)
 
             # Update poses for robot hands and save qpos
-            for robot, retargeting, retarget2sapien, robot_name in zip(
-            self.robots, self.retargetings, self.retarget2sapien, self.robot_names
+            for robot, retargeting, retarget2pk, retarget2sapien, robot_name in zip(
+            self.robots, self.retargetings, self.retarget2pk, self.retarget2sapien, self.robot_names
             ):
                 indices = retargeting.optimizer.target_link_human_indices
                 ref_value = joint[indices, :]
-                qpos = retargeting.retarget(ref_value)[retarget2sapien]
-                robot.set_qpos(qpos)
-                qpos_dict[robot_name].append(qpos.copy())
+                qpos_retarget = retargeting.retarget(ref_value)
+                qpos_sapien = qpos_retarget[retarget2sapien]
+                qpos_pk = qpos_retarget[retarget2pk]
+                robot.set_qpos(qpos_sapien)
+                qpos_dict[robot_name].append(qpos_pk.copy())
 
         # Save qpos to disk as npy files
-        save_dir = Path(__file__).parent.resolve() / "qpos"
+        save_dir = Path(__file__).parent.resolve() / "hand_qpos"
         save_dir.mkdir(parents=True, exist_ok=True)
         for robot_name, qpos_list in qpos_dict.items():
             qpos_arr = np.stack(qpos_list, axis=0)
-            np.save(save_dir / f"{str(robot_name).split('.')[-1]}_seq_{data_id}_from_{start_frame}_qpos.npy", qpos_arr)
+            np.save(save_dir / f"{str(robot_name).split('.')[-1]}_seq_{data_id}_qpos.npy", qpos_arr)
 

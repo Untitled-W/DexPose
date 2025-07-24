@@ -1026,10 +1026,7 @@ def vis_dex_pc_coor_plotly(pc_ls: List[np.ndarray] = None,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)")
 
-    if filename is not None:
-        fig.write_html(f'{filename}.html')
-    else:
-        fig.show()
+    return data
 
 
 def vis_dex_frames_plotly(pc_ls: List[np.ndarray] = None, 
@@ -1046,15 +1043,13 @@ def vis_dex_frames_plotly(pc_ls: List[np.ndarray] = None,
     initial_data = vis_dex_pc_coor_plotly(pc_ls=get_subitem(pc_ls, 0), 
                                         gt_hand_joints=get_subitem(gt_hand_joints, 0),
                                         dex_mesh=dex_mesh,
-                                        show_axis=show_axis,
-                                        return_data=True)
+                                        show_axis=show_axis)
     frames = []
     for t in range(T):
         data = vis_dex_pc_coor_plotly(pc_ls=get_subitem(pc_ls, t), 
                                     gt_hand_joints=get_subitem(gt_hand_joints, t),
                                     dex_mesh=dex_mesh,
-                                    show_axis=show_axis,
-                                    return_data=True)
+                                    show_axis=show_axis)
         frames.append(go.Frame(data=data, name=f"Frame {t}"))
 
     slider_steps = []
