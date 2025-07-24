@@ -977,7 +977,7 @@ def get_vis_dex_keypoints_with_color_gradient_and_lines(gt_posi_pts: np.ndarray,
 
 def vis_dex_pc_coor_plotly(pc_ls: List[np.ndarray] = None, 
                             gt_hand_joints: np.ndarray = None, 
-                            finger_groups: dict = None,
+                            dex_mesh: List[o3d.cuda.pybind.geometry.TriangleMesh] = None,
                             show_axis: bool = False, 
                             filename: str = None) -> None:
     """
@@ -991,17 +991,27 @@ def vis_dex_pc_coor_plotly(pc_ls: List[np.ndarray] = None,
     """
     data = []
 
-    if pc_ls is not None:
-        for i, pc in enumerate(pc_ls):
-            data.append(go.Scatter3d(
-                x=pc[:, 0], y=pc[:, 1], z=pc[:, 2],
-                mode='markers',
-                marker=dict(size=5, color='purple'),
-                name=f"Point Cloud {i+1}"
-            ))
+    for i, pc in enumerate(pc_ls):
+        data.append(go.Scatter3d(
+            x=pc[:, 0], y=pc[:, 1], z=pc[:, 2],
+            mode='markers',
+            marker=dict(size=5, color='purple'),
+            name=f"Point Cloud {i+1}"
+        ))
 
-    if gt_hand_joints is not None:
-        data.extend(get_vis_dex_keypoints_with_color_gradient_and_lines(gt_hand_joints, finger_groups,color_scale='Bluered'))
+    data.extend(get_vis_hand_keypoints_with_color_gradient_and_lines(gt_hand_joints, color_scale='Bluered'))
+
+    for i, hand_mesh in enumerate(dex_mesh):
+        if type(hand_mesh) == o3d.cuda.pybind.geometry.TriangleMesh:
+            verts = np.asarray(hand_mesh.vertices)
+            faces = np.asarray(hand_mesh.triangles)
+        else: 
+            verts = np.asarray(hand_mesh.vertices)
+            faces = np.asarray(hand_mesh.faces)
+        data.append(go.Mesh3d(x=verts[:, 0], y=verts[:, 1], z=verts[:, 2], 
+                                i=faces[:, 0], j=faces[:, 1], k=faces[:, 2], 
+                                color='royalblue',
+                                name=f"Hand Mesh {i}"))
 
     fig = go.Figure(data=data)
     fig.update_layout(scene=dict(
@@ -1024,7 +1034,7 @@ def vis_dex_pc_coor_plotly(pc_ls: List[np.ndarray] = None,
 
 def vis_dex_frames_plotly(pc_ls: List[np.ndarray] = None, 
                           gt_hand_joints: np.ndarray = None, 
-                          finger_groups: dict = None,
+                          dex_mesh: List[o3d.cuda.pybind.geometry.TriangleMesh] = None,
                           show_axis: bool = False, 
                           filename: str = None):
     """
@@ -1035,14 +1045,14 @@ def vis_dex_frames_plotly(pc_ls: List[np.ndarray] = None,
 
     initial_data = vis_dex_pc_coor_plotly(pc_ls=get_subitem(pc_ls, 0), 
                                         gt_hand_joints=get_subitem(gt_hand_joints, 0),
-                                        finger_groups=finger_groups,
+                                        dex_mesh=dex_mesh,
                                         show_axis=show_axis,
                                         return_data=True)
     frames = []
     for t in range(T):
         data = vis_dex_pc_coor_plotly(pc_ls=get_subitem(pc_ls, t), 
                                     gt_hand_joints=get_subitem(gt_hand_joints, t),
-                                    finger_groups=finger_groups,
+                                    dex_mesh=dex_mesh,
                                     show_axis=show_axis,
                                     return_data=True)
         frames.append(go.Frame(data=data, name=f"Frame {t}"))
