@@ -2,6 +2,7 @@ data/*
 logs
 urdf
 hand_qpos
+vis_results
 test.py
 *.urdf
 

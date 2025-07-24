@@ -11,6 +11,7 @@ import open3d as o3d
 from pytorch3d.transforms import (
     quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
 )
+from pytransform3d import transformations as pt
 
 from dataset import DexYCBVideoDataset
 from dex_retargeting.constants import RobotName, HandType
@@ -19,7 +20,7 @@ from hand_robot_viewer import RobotHandDatasetSAPIENViewer
 from hand_viewer import HandDatasetSAPIENViewer
 from mano_layer import MANOLayer
 from hand_model import HandModelURDF
-from vis_utils import vis_dex_frames_plotly
+from vis_utils import vis_frames_plotly
 
 import warnings; warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -61,7 +62,7 @@ def pt_transform(points, transformation):
 
 
 
-def viz_hand_object(robots: Optional[Tuple[RobotName]], data_root: Path, fps: int):
+def viz_hand_object(data_id, robots: Optional[Tuple[RobotName]], data_root: Path, fps: int):
     dataset = DexYCBVideoDataset(data_root, hand_type="right")
     if robots is None:
         viewer = HandDatasetSAPIENViewer(headless=True, use_ray_tracing=True)
@@ -69,9 +70,6 @@ def viz_hand_object(robots: Optional[Tuple[RobotName]], data_root: Path, fps: in
         viewer = RobotHandDatasetSAPIENViewer(
             list(robots), HandType.right, headless=True, use_ray_tracing=True
         )
-
-    # Data ID, feel free to change it to visualize different trajectory
-    data_id = 4
 
     sampled_data = dataset[data_id]
     for key, value in sampled_data.items():
@@ -82,7 +80,7 @@ def viz_hand_object(robots: Optional[Tuple[RobotName]], data_root: Path, fps: in
     # viewer.render_dexycb_data(sampled_data, data_id, fps)
 
 
-def main(dexycb_dir: str, robots: Optional[List[RobotName]] = None, fps: int = 10):
+def main(data_id: int, dexycb_dir: str, robots: Optional[List[RobotName]] = None, fps: int = 10):
     """
     Render the human and robot trajectories for grasping object inside DexYCB dataset.
     The human trajectory is visualized as provided, while the robot trajectory is generated from position retargeting
@@ -103,7 +101,7 @@ def main(dexycb_dir: str, robots: Optional[List[RobotName]] = None, fps: int = 1
     else:
         print(f"Using DexYCB dir: {data_root}")
 
-    viz_hand_object(robots, data_root, fps)
+    viz_hand_object(data_id, robots, data_root, fps)
 
 
 
@@ -111,28 +109,35 @@ def main(dexycb_dir: str, robots: Optional[List[RobotName]] = None, fps: int = 1
 
 def load_robot(robot_name_str: str, side):
 
-    urdf_files = f'/home/qianxu/Desktop/Project/DexPose/retarget/urdf/{robot_name_str}_hand_{side}_glb.urdf'
+    def urdf_name_map(robot_name, side):
+        name = {
+            'shadow': 'shadow_',
+            'leap': 'leap_',
+            'svh': 'schunk_svh_',
+            'allegro': 'allegro_',
+            'barrett': 'barrett_',
+            'inspire': 'inspire_',
+            'panda': 'panda_gripper',
+        }
+        if robot_name == 'panda': return name[robot_name]
+        return name[robot_name] + 'hand_' + side
 
-    # Load the URDF file for the robot
-    with open(urdf_files, 'rb') as f:
-        urdf_str = f.read()
+    asset_name_map = {
+        'shadow': 'shadow_hand',
+        'leap': 'leap_hand',
+        'svh': 'schunk_hand',
+        'allegro': 'allegro_hand',
+        'barrett': 'barrett_hand',
+        'inspire': 'inspire_hand',
+        'panda': 'panda_gripper',
+    }
 
-    # Construct the kinematic chain from the URDF
-    robot_chain = pk.build_chain_from_urdf(urdf_str)
-    
-    for i, jt in enumerate(robot_chain.get_joint_parameter_names()):
-        print(i, jt)
-    robot_chain.print_tree()
-    
-    for joint_name in robot_chain.get_joint_parameter_names():
-        for link in robot_chain.links:
-            if link.joint.name == joint_name:
-                parent_link = link.parent
-                child_link = link.name
-                print(f"{joint_name}: {parent_link} - {child_link}")
-                break
+    robot = HandModelURDF(robot_name_str,
+                          f'/home/qianxu/Desktop/Project/DexPose/retarget/urdf/{urdf_name_map(robot_name_str, side)}_glb.urdf',
+                          f'/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/{asset_name_map[robot_name_str]}/meshes',
+                        )
 
-    return robot_chain
+    return robot
 
 def get_point_clouds(data: dict):
     ycb_mesh_files = data["object_mesh_file"] # a list of .obj file path
@@ -153,7 +158,7 @@ def get_point_clouds(data: dict):
 def compute_hand_geometry(hand_pose_frame, mano_layer):
     # pose parameters all zero, no hand is detected
     if np.abs(hand_pose_frame).sum() < 1e-5:
-        return None, None
+        return None
     p = torch.from_numpy(hand_pose_frame[:, :48].astype(np.float32))
     t = torch.from_numpy(hand_pose_frame[:, 48:51].astype(np.float32))
     vertex, joint = mano_layer(p, t)
@@ -165,59 +170,112 @@ def compute_hand_geometry(hand_pose_frame, mano_layer):
 
 
 
-def test(robot_name: Optional[List[RobotName]] = RobotName.allegro, dexycb_dir: str = '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data', hand_type: str = "right", fps: int = 10):
+def test(data_id: int = 4, robots: Optional[List[RobotName]] = [RobotName.allegro], dexycb_dir: str = '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data', hand_type: str = "right", fps: int = 10):
 
+    robot_name = robots[0]
     robot_name_str = str(robot_name).split(".")[-1]
     data_root = Path(dexycb_dir).absolute()
-    dataset = DexYCBVideoDataset(data_root, hand_type=hand_type)
+    dataset = DexYCBVideoDataset(data_root, hand_type=hand_type, mode="sub")
 
-    data_id = 4
     sampled_data = dataset[data_id]
 
  
-    robot = load_robot(robot_name, hand_type)
+    robot = load_robot(robot_name_str, hand_type)
 
-    qpos_file = f'/home/qianxu/Desktop/Project/DexPose/retarget/hand_qpos/{str(robot_name).split(".")[-1]}_seq_{data_id}_from_0_qpos.npy'
+    qpos_file = f'/home/qianxu/Desktop/Project/DexPose/retarget/hand_qpos/{robot_name_str}_seq_{data_id}_qpos.npy'
     qpos = np.load(qpos_file)
 
     ### hand meshes ###
     hand_meshes = []
     for i in range(qpos.shape[0]):
-        robot.set_qpos(qpos[i])
+        robot.set_qpos(torch.from_numpy(qpos[i].astype(np.float32)))
         hand_mesh = robot.get_hand_mesh()
+        # print(len(hand_mesh.vertices), len(hand_mesh.triangles))
         hand_meshes.append(hand_mesh)
-        
-    ### point clouds ###
-    pc = get_point_clouds(sampled_data)
-    object_pose = sampled_data["object_pose"] # T x 7, 7=q+t, q=xyzw, t=xyz
-    pc_ls = []
-    for i in range(object_pose.shape[0]):
-        pose = torch.from_numpy(object_pose[i])
-        transformation = torch.eye(4)
-        transformation[:3, :3] = quaternion_to_matrix(torch.cat((pose[3:4], pose[:3])))
-        transformation[:3, 3] = pose[4:]
-        transformed_pc = pt_transform(pc, transformation)
-        pc_ls.append(transformed_pc)
 
+    extrinsic_mat =sampled_data["extrinsics"] 
+    pose_vec = pt.pq_from_transform(extrinsic_mat)
+    camera_pose = torch.eye(4)
+    camera_pose[:3, :3] = quaternion_to_matrix(torch.from_numpy(pose_vec[3:7]))
+    camera_pose[:3, 3] = torch.from_numpy(pose_vec[0:3])
+    camera_pose = camera_pose.numpy()
+    camera_pose = np.linalg.inv(camera_pose)
+
+        
+    start_frame = 0
     ### hand joints ###
     hand_joints = []
     hand_pose_frame = sampled_data["hand_pose"]
     mano_layer = MANOLayer(hand_type, np.zeros(10).astype(np.float32))
     for i in range(hand_pose_frame.shape[0]):
         joint = compute_hand_geometry(hand_pose_frame[i], mano_layer= mano_layer)
+        if joint is None:
+            start_frame += 1
+            continue
+        joint = joint @ camera_pose[:3, :3].T + camera_pose[:3, 3]
+        joint = np.ascontiguousarray(joint)
         hand_joints.append(joint)
-    
+    hand_joints = torch.tensor(hand_joints, dtype=torch.float32)
 
-    vis_dex_frames_plotly(
+
+    ### point clouds ###
+    pc = get_point_clouds(sampled_data)
+    object_pose = sampled_data["object_pose"] # T x 7, 7=q+t, q=xyzw, t=xyz
+    pc_ls = []
+    for i in range(start_frame, object_pose.shape[0]):
+        pose = torch.from_numpy(object_pose[i])
+        transformation = torch.eye(4)
+        transformation[:3, :3] = quaternion_to_matrix(torch.cat((pose[3:4], pose[:3])))
+        transformation[:3, 3] = pose[4:]
+        transformed_pc = pt_transform(pc, transformation)
+        transformed_pc = transformed_pc @ camera_pose[:3, :3].T + camera_pose[:3, 3]
+        transformed_pc = np.ascontiguousarray(transformed_pc)
+        pc_ls.append(torch.from_numpy(transformed_pc))
+    pc_ls = [torch.stack(pc_ls).type(torch.float32)]
+
+
+    vis_frames_plotly(
         pc_ls=pc_ls,
         gt_hand_joints=hand_joints,
-        dex_mesh=hand_meshes,
+        hand_mesh=hand_meshes,
         show_axis=True,
-        filename="test"
+        filename=f"vis_results/{robot_name_str}_seq_{data_id}_qpos"
     )    
 
+
+def run(data_id : int = 4, mode : str = "test", robots: Optional[List[RobotName]] = [RobotName.allegro], dexycb_dir: str = '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data', hand_type: str = "right", fps: int = 10):
+    if mode == "test":
+        test(data_id, robots, dexycb_dir, hand_type, fps)
+    elif mode == "main":
+        main(data_id, dexycb_dir, robots, fps)
+    elif mode == "all":
+        main(data_id, dexycb_dir, robots, fps)
+        import time; time.sleep(1)
+        test(data_id, robots, dexycb_dir, hand_type, fps)
+    else:
+        raise ValueError(f"Unknown mode: {mode}. Supported modes are 'test' and 'main'.")
+
+
+def test_multiple():
+    # Example usage of the test function with multiple data IDs
+    data_ids = [0]
+    robots = [RobotName.inspire, 
+              RobotName.svh, 
+              RobotName.leap, 
+              RobotName.allegro, 
+              RobotName.shadow, 
+              RobotName.panda]  # List of robots to test
+
+    for data_id in data_ids:
+        for robot in robots:
+            print(f"Testing with data_id: {data_id}, robot: {robot}")
+            main(data_id=data_id, dexycb_dir='/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data', robots=[robot], fps=10)
+            import time; time.sleep(1)
+            test(data_id=data_id, robots=[robot], dexycb_dir='/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data', hand_type="right", fps=10)
 
 
 if __name__ == "__main__":
     # tyro.cli(main)
-    tyro.cli(test)
+    # tyro.cli(test)
+    # tyro.cli(run, description="Run the hand-object visualization for DexYCB dataset.")
+    test_multiple()
