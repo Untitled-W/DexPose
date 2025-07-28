@@ -109,7 +109,7 @@ _BOP_EVAL_SUBSAMPLING_FACTOR = 4
 
 
 class DexYCBVideoDataset:
-    def __init__(self, data_dir, hand_type="right", filter_objects=[], mode="full"):
+    def __init__(self, data_dir, hand_type="right", filter_objects=[], mode="sub"):
         self._data_dir = Path(data_dir)
         self._calib_dir = self._data_dir / "calibration"
         self._model_dir = self._data_dir / "models"

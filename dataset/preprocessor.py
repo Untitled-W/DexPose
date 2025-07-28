@@ -5,6 +5,7 @@ Specific dataset processors for OAKINKv2 and TACO datasets.
 import os
 import ast
 import json
+import random
 import pickle
 import logging
 from typing import Dict, List, Tuple, Any, Optional
@@ -14,14 +15,17 @@ import matplotlib.pyplot as plt
 from collections import Counter
 from scipy.spatial.transform import Rotation as R
 from pytorch3d.transforms import (
-    quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
+    quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion, quaternion_to_axis_angle
 )
+from pytransform3d import transformations as pt
+from manopth.manolayer import ManoLayer
 
 
-import sys; sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from base import BaseDatasetProcessor, DatasetRegistry, HumanSequenceData, ORIGIN_DATA_PATH, HUMAN_SEQ_PATH
-from utils import apply_transformation_pt
-from vis_utils import visualize_human_sequence
+
+from .base_structure import BaseDatasetProcessor, DatasetRegistry, HumanSequenceData, ORIGIN_DATA_PATH, HUMAN_SEQ_PATH
+from utils.tools import apply_transformation_pt
+from utils.vis_utils import visualize_human_sequence
+from utils.dexycb_dataset import DexYCBVideoDataset, YCB_CLASSES
 
 
 # Oakinkv2Processor
@@ -111,7 +115,7 @@ class OAKINKv2Processor(BaseDatasetProcessor):
                             'obj_names': l_obj_names,
                             'primitive': lh_primitive,
                             'description': l_desc,
-                            'extra_desc': description,
+                            'extra_info': description,
                             'anno': anno,
                             'l_valid': True,
                             'r_valid': False
@@ -132,7 +136,7 @@ class OAKINKv2Processor(BaseDatasetProcessor):
                             'obj_names': r_obj_names,
                             'primitive': rh_primitive,
                             'description': r_desc,
-                            'extra_desc': description,
+                            'extra_info': description,
                             'anno': anno,
                             'l_valid': False,
                             'r_valid': True
@@ -437,16 +441,120 @@ class TACOProcessor(BaseDatasetProcessor):
         return f"{verb} the {obj_name}"
 
 
+# DexYCBProcessor
+@DatasetRegistry.register('dexycb')
+class DexYCBProcessor(BaseDatasetProcessor):
+    def _setup_paths(self):
+        self.dataset = DexYCBVideoDataset(self.root_path)
+    
+    def _get_data_list(self):
+        return range(len(self.dataset))
+    
+    def _apply_transformation_pt(self, points: torch.Tensor, transform: torch.Tensor) -> torch.Tensor:
+        """Apply transformation to points."""
+        return apply_transformation_pt(points, transform)
+
+    def _load_sequence_data(self, data_item):
+        seq_data =  self.dataset[data_item]
+        return [{
+                'which_dataset': 'DexYCB',
+                'which_sequence': seq_data['capture_name'],
+                'side': 'r',
+                'obj_names': YCB_CLASSES[seq_data['ycb_ids'][0]],
+                'frame_indices': list(range(0, len(seq_data['hand_pose']), self.task_interval)),
+                'hand_pose': seq_data['hand_pose'],
+                'object_pose': seq_data['object_pose'],
+                'extrinsics': seq_data['extrinsics'],
+                'object_mesh_file': seq_data['object_mesh_file'][0],
+                'description': "",
+                'extra_info': {'extrinsics': seq_data['extrinsics']},
+                'anno': "",
+                'l_valid': False,
+                'r_valid': True
+            }]
+    
+    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get hand tsl and coeffs information."""
+        hand_pose_frame = raw_data['hand_pose'][frame_indices]
+        p = torch.from_numpy(hand_pose_frame[..., : 48].astype(np.float32))
+
+        xx = ManoLayer(
+            flat_hand_mean=False,
+            ncomps=45,
+            side="left" if side == 'l' else 'right',
+            use_pca=True,
+        )
+        p[...,3:] = p[...,3:] @ xx.th_selected_comps + xx.th_hands_mean
+        t_offset = torch.stack([xx(pp)[1].cpu()[0] * 0.001 for pp in p], axis=0).numpy()[:,0,:]
+
+        p = p.reshape(-1, 16, 3)  # Reshape to (T, 16, 3)
+        h_coeffs = axis_angle_to_quaternion(p)
+        t = torch.from_numpy(hand_pose_frame[..., 48:51].astype(np.float32)).reshape(-1, 3) + t_offset
+
+        yup2xup = np.linalg.inv(raw_data['extrinsics'])
+        yup2xup = torch.from_numpy(yup2xup).float()
+        # yup2xup = torch.eye(4)
+        
+        # Transform hand pose
+        hand_transformation = torch.eye(4).unsqueeze(0).repeat((p.shape[0], 1, 1))
+        hand_rotation_quat = h_coeffs[:, 0]
+        hand_transformation[:, :3, :3] = quaternion_to_matrix(hand_rotation_quat)
+        hand_transformation[:, :3, 3] = t
+        hand_transformation = yup2xup @ hand_transformation
+        h_coeffs[:, 0] = matrix_to_quaternion(hand_transformation[:, :3, :3])
+        h_tsl = hand_transformation[:, :3, 3]
+
+        # h_coeffs[:, 0] = matrix_to_quaternion(yup2xup[:3, :3] @ hand_transformation[:, :3, :3])
+        # h_tsl = self._apply_transformation_pt(t, yup2xup)
+
+        return h_tsl, h_coeffs
+    
+    def _get_task_description(self, raw_data):
+        return ""
+
+    def _get_object_info(self, raw_data: Dict[str, Any], frame_indices: List[int]) -> Tuple[List[torch.Tensor], List[str]]:
+        """Get object transformation and mesh path."""
+        object_pose = raw_data['object_pose'][frame_indices]
+        # extrinsic_mat = raw_data['extrinsics']
+        
+        # pose_vec = pt.pq_from_transform(extrinsic_mat)
+        # camera_pose = torch.eye(4)
+        # camera_pose[:3, :3] = quaternion_to_matrix(torch.from_numpy(pose_vec[3:7]))
+        # camera_pose[:3, 3] = torch.from_numpy(pose_vec[0:3])
+        # camera_pose = camera_pose.numpy()
+        # camera_pose = np.linalg.inv(camera_pose)
+        camera_pose = np.linalg.inv(raw_data['extrinsics'])
+    
+        # Apply extrinsics transformation to object poses
+        obj_transf = []
+        for i in range(object_pose.shape[0]):
+            pose = torch.from_numpy(object_pose[i])
+            transformation = torch.eye(4)
+            transformation[:3, :3] = quaternion_to_matrix(torch.cat((pose[3:4], pose[:3])))
+            transformation[:3, 3] = pose[4:]
+            obj_transf.append(camera_pose @ transformation.numpy())
+        obj_transf = np.stack(obj_transf, axis=0)
+        yup2xup = self._apply_coordinate_transform(raw_data['side']).T
+        obj_poses_transformed = yup2xup.cpu().numpy().astype(np.float32) @ obj_transf
+
+        # Get object names
+        object_names = raw_data['obj_names']
+        # Get mesh path
+        mesh_path = raw_data['object_mesh_file']
+
+        return [obj_poses_transformed], [object_names], [mesh_path]
+
+
 # Dataset configurations
 DATASET_CONFIGS = {
     'oakinkv2': {
         'processor_name': 'oakinkv2',
         'root_path': ORIGIN_DATA_PATH['Oakinkv2'],
         'save_path': HUMAN_SEQ_PATH['Oakinkv2'],
-        'task_interval': 10,
+        'task_interval': 20,
         'which_dataset': 'Oakinkv2',
         'seq_data_name': 'debug',
-        # 'sequence_indices': list(range(0, 5))  # Example sequence indices for processing
+        'sequence_indices': list(range(0, 50))  # Example sequence indices for processing
     },
     
     'taco': {
@@ -457,6 +565,16 @@ DATASET_CONFIGS = {
         'which_dataset': 'Taco',
         'seq_data_name': 'debug',
         # 'sequence_indices': list(range(0, 10))  # Example sequence indices for processing
+    },
+
+    'dexycb': {
+        'processor_name': 'dexycb',
+        'root_path': ORIGIN_DATA_PATH['DexYCB'],
+        'save_path': HUMAN_SEQ_PATH['DexYCB'],
+        'task_interval': 1,
+        'which_dataset': 'DexYCB',
+        'seq_data_name': 'debug',
+        # 'sequence_indices': list(range(0, 10))  # Example sequence indices for
     }
 }
 
@@ -633,8 +751,6 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
     Args:
         human_data: List of HumanSequenceData objects
     """
-    import random
-    from vis_utils import visualize_human_sequence
     
     dataset_data = {}
     for data in human_data:
@@ -649,14 +765,15 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
         sampled_data = random.sample(data_list, 10)
         for d in sampled_data:
             print(f"Visualizing sequence {d.which_sequence}")
-            visualize_human_sequence(d, f'logs/{d.which_dataset}_{d.which_sequence}.html')
+            visualize_human_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/dataset/vis_results/{d.which_dataset}_{d.which_sequence}.html')
+
 
 if __name__ == "__main__":
 
-    dataset_names = ['taco', 'oakinkv2']
+    dataset_names = ['dexycb', 'taco', 'oakinkv2']
     processed_data = []
     
-    GENERATE = False
+    GENERATE = True
     if GENERATE:
         processed_data = process_multiple_datasets(dataset_names)
     else:

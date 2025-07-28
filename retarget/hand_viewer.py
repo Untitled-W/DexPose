@@ -11,8 +11,8 @@ from sapien import internal_renderer as R
 from sapien.asset import create_dome_envmap
 from sapien.utils import Viewer
 
-from dataset import YCB_CLASSES
-from mano_layer import MANOLayer
+from utils.dexycb_dataset import YCB_CLASSES
+from utils.mano_layer import MANOLayer
 
 
 def compute_smooth_shading_normal_np(vertices, indices):
@@ -168,6 +168,22 @@ class HandDatasetSAPIENViewer:
         self.mano_face = self.mano_layer.f.cpu().numpy()
         pose_vec = pt.pq_from_transform(extrinsic_mat)
         self.camera_pose = sapien.Pose(pose_vec[0:3], pose_vec[3:7]).inv()
+
+    def load_object_hand_2(self, data: Dict):
+        data_ids = data.object_names
+        mesh_files = data.object_mesh_path
+        for data_id, mesh_file in zip(data_ids, mesh_files):
+            self._load_object(data_id, mesh_file)
+
+        self.mano_layer = MANOLayer("right", np.zeros(10).astype(np.float32))
+        self.mano_face = self.mano_layer.f.cpu().numpy()
+        self.camera_pose = sapien.Pose(np.zeros(3), np.zeros(4)).inv()
+
+    def _load_object(self, name, ycb_mesh_file):
+        builder = self.scene.create_actor_builder()
+        builder.add_visual_from_file(ycb_mesh_file)
+        actor = builder.build_static(name=name)
+        self.objects.append(actor)
 
     def _load_ycb_object(self, ycb_id, ycb_mesh_file):
         builder = self.scene.create_actor_builder()

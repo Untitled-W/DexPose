@@ -1,8 +1,5 @@
 import os
-import json
-import pickle
 import logging
-import copy
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple, Any, Optional, Union
 from dataclasses import dataclass
@@ -10,22 +7,24 @@ import numpy as np
 import torch
 import open3d as o3d
 from tqdm import tqdm
-from manotorch.manolayer import ManoLayer
 
 
 ORIGIN_DATA_PATH = {
     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco",
     "Oakinkv2": '/home/qianxu/Desktop/New_Folder/OakInk2/OakInk-v2-hub',
+    'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
 }
 
 HUMAN_SEQ_PATH = {
     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/human_save",
     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/human_save",
+    'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data/human_save'
 }
 
 DEX_SEQ_PATH = {
     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/dex_save",
     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/dex_save",
+    'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
 }
 
 # HumanSequenceData
@@ -54,20 +53,26 @@ class HumanSequenceData:
 @dataclass
 class DexSequenceData:
     """Standardized data structure for a dexterous manipulation sequence."""
-    # Hand data
-    hand_type: str
+    # Dex Hand data
+    which_hand: str
     hand_poses: torch.Tensor  # T X n_dof
     side: int  # 0 for left, 1 for right
+
+    # Human Hand data
+    hand_tsls: torch.Tensor  # T X 3
+    hand_coeffs: torch.Tensor  # T X 16*4
 
     # Object data
     obj_poses: torch.Tensor  # K X T X 4 X 4
     obj_point_clouds: torch.Tensor  # K X N X 3
     obj_feature: torch.Tensor  # K X N X d
+    object_names: List[str]  # Names of objects in the sequence
+    object_mesh_path: List[str]
 
     # Metadata
-    object_mesh_path: List[str]
     frame_indices: List[int]  # Frame indices in the original sequence
     task_description: str
+    which_dataset: str
     which_sequence: str
     extra_info: Optional[Dict[str, Any]] = None
 
@@ -90,9 +95,6 @@ class BaseDatasetProcessor(ABC):
         self.which_dataset = which_dataset
         self.seq_data_name = seq_data_name
         self.sequence_indices = sequence_indices
-        
-        self.mano_layer_left = ManoLayer(center_idx=0, side='left', rot_mode="quat", use_pca=False).cuda()
-        self.mano_layer_right = ManoLayer(center_idx=0, side='right', rot_mode="quat", use_pca=False).cuda()
         
         # Setup paths
         self._setup_paths()
@@ -174,10 +176,10 @@ class BaseDatasetProcessor(ABC):
                         for obj_transf in object_transf_ls]
         
         sequence_data = HumanSequenceData(
-            hand_tsls=hand_tsl,
-            hand_coeffs=hand_coeffs,
+            hand_tsls=hand_tsl.cpu(),
+            hand_coeffs=hand_coeffs.cpu(),
             side=1 if side == 'r' else 0,
-            obj_poses=torch.stack(obj_transf_ls),
+            obj_poses=torch.stack(obj_transf_ls).cpu(),
             object_names=object_name_ls,
             object_mesh_path=object_mesh_path_ls,
             frame_indices=frame_indices,
@@ -198,7 +200,7 @@ class BaseDatasetProcessor(ABC):
         # for idx in tqdm(range(len(self.data_ls)), desc=f"Processing {self.seq_data_name}"):
         for idx in tqdm(sequence_indices, desc=f"Processing {self.which_dataset}-{self.seq_data_name}"):
 
-            DEBUG = False
+            DEBUG = True
 
             if DEBUG:
                 data_item = self.data_ls[idx]

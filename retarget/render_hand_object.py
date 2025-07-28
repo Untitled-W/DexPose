@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional, Tuple, List
 
+
 import numpy as np
 import tyro
 import os
@@ -9,20 +10,27 @@ from torch_cluster import fps
 import pytorch_kinematics as pk
 import open3d as o3d
 from pytorch3d.transforms import (
-    quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
+    quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion, quaternion_to_axis_angle
 )
 from pytransform3d import transformations as pt
 
-from dataset import DexYCBVideoDataset
 from dex_retargeting.constants import RobotName, HandType
 from dex_retargeting.retargeting_config import RetargetingConfig
-from hand_robot_viewer import RobotHandDatasetSAPIENViewer
-from hand_viewer import HandDatasetSAPIENViewer
-from mano_layer import MANOLayer
-from hand_model import HandModelURDF
-from vis_utils import vis_frames_plotly
+
+
+from utils.dexycb_dataset import DexYCBVideoDataset
+from .hand_robot_viewer import RobotHandDatasetSAPIENViewer
+from .hand_viewer import HandDatasetSAPIENViewer
+
+from utils.hand_model import load_robot
+from utils.mano_layer import MANOLayer
+from utils.tools import (pt_transform,
+                        get_point_clouds_from_dexycb,
+                        compute_hand_geometry)
+from utils.vis_utils import vis_frames_plotly
 
 import warnings; warnings.filterwarnings("ignore", category=UserWarning)
+
 
 # For numpy version compatibility
 np.bool = bool
@@ -34,36 +42,9 @@ np.object = object
 np.unicode = np.unicode_
 
 
-def farthest_point_sampling(pos: torch.FloatTensor, n_sampling: int):
-    bz, N = pos.size(0), pos.size(1)
-    feat_dim = pos.size(-1)
-    device = pos.device
-    sampling_ratio = float(n_sampling / N)
-    pos_float = pos.float()
-
-    batch = torch.arange(bz, dtype=torch.long).view(bz, 1).to(device)
-    mult_one = torch.ones((N,), dtype=torch.long).view(1, N).to(device)
-
-    batch = batch * mult_one
-    batch = batch.view(-1)
-    pos_float = pos_float.contiguous().view(-1, feat_dim).contiguous() # (bz x N, 3)
-    # sampling_ratio = torch.tensor([sampling_ratio for _ in range(bz)], dtype=torch.float).to(device)
-    # batch = torch.zeros((N, ), dtype=torch.long, device=device)
-    sampled_idx = fps(pos_float, batch, ratio=sampling_ratio, random_start=True)
-    # shape of sampled_idx?
-    return sampled_idx
-  
-def pt_transform(points, transformation):
-    points_homogeneous = np.hstack((points, np.ones((points.shape[0], 1))))
-    transformed_points = (transformation @ points_homogeneous.T).T
-    return transformed_points[:, :3]
-
-
-
-
 
 def viz_hand_object(data_id, robots: Optional[Tuple[RobotName]], data_root: Path, fps: int):
-    dataset = DexYCBVideoDataset(data_root, hand_type="right")
+    dataset = DexYCBVideoDataset(data_root, hand_type="right", mode='full')
     if robots is None:
         viewer = HandDatasetSAPIENViewer(headless=True, use_ray_tracing=True)
     else:
@@ -105,71 +86,6 @@ def main(data_id: int, dexycb_dir: str, robots: Optional[List[RobotName]] = None
 
 
 
-
-
-def load_robot(robot_name_str: str, side):
-
-    def urdf_name_map(robot_name, side):
-        name = {
-            'shadow': 'shadow_',
-            'leap': 'leap_',
-            'svh': 'schunk_svh_',
-            'allegro': 'allegro_',
-            'barrett': 'barrett_',
-            'inspire': 'inspire_',
-            'panda': 'panda_gripper',
-        }
-        if robot_name == 'panda': return name[robot_name]
-        return name[robot_name] + 'hand_' + side
-
-    asset_name_map = {
-        'shadow': 'shadow_hand',
-        'leap': 'leap_hand',
-        'svh': 'schunk_hand',
-        'allegro': 'allegro_hand',
-        'barrett': 'barrett_hand',
-        'inspire': 'inspire_hand',
-        'panda': 'panda_gripper',
-    }
-
-    robot = HandModelURDF(robot_name_str,
-                          f'/home/qianxu/Desktop/Project/DexPose/retarget/urdf/{urdf_name_map(robot_name_str, side)}_glb.urdf',
-                          f'/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/{asset_name_map[robot_name_str]}/meshes',
-                        )
-
-    return robot
-
-def get_point_clouds(data: dict):
-    ycb_mesh_files = data["object_mesh_file"] # a list of .obj file path
-    meshes = []
-    for mesh_file in ycb_mesh_files:
-        mesh = o3d.io.read_triangle_mesh(mesh_file)
-        meshes.append(mesh)
-    
-    original_pc = [np.asarray(mesh.vertices) for mesh in meshes if mesh is not None]
-
-    original_pc_ls = [
-            farthest_point_sampling(torch.from_numpy(points).unsqueeze(0), 1000)[:1000]  for points in original_pc
-        ]
-    pc_ds = [pc[pc_idx] for pc, pc_idx in zip(original_pc, original_pc_ls)]
-
-    return pc_ds[0] # only 1 object in the dataset
-
-def compute_hand_geometry(hand_pose_frame, mano_layer):
-    # pose parameters all zero, no hand is detected
-    if np.abs(hand_pose_frame).sum() < 1e-5:
-        return None
-    p = torch.from_numpy(hand_pose_frame[:, :48].astype(np.float32))
-    t = torch.from_numpy(hand_pose_frame[:, 48:51].astype(np.float32))
-    vertex, joint = mano_layer(p, t)
-    vertex = vertex.cpu().numpy()[0]
-    joint = joint.cpu().numpy()[0]
-
-    return joint
-
-
-
-
 def test(data_id: int = 4, robots: Optional[List[RobotName]] = [RobotName.allegro], dexycb_dir: str = '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data', hand_type: str = "right", fps: int = 10):
 
     robot_name = robots[0]
@@ -206,6 +122,11 @@ def test(data_id: int = 4, robots: Optional[List[RobotName]] = [RobotName.allegr
     ### hand joints ###
     hand_joints = []
     hand_pose_frame = sampled_data["hand_pose"]
+
+    import pickle
+    with open("a_rtg.pkl", "wb") as f:
+        pickle.dump(hand_pose_frame, f)
+
     mano_layer = MANOLayer(hand_type, np.zeros(10).astype(np.float32))
     for i in range(hand_pose_frame.shape[0]):
         joint = compute_hand_geometry(hand_pose_frame[i], mano_layer= mano_layer)
@@ -219,7 +140,7 @@ def test(data_id: int = 4, robots: Optional[List[RobotName]] = [RobotName.allegr
 
 
     ### point clouds ###
-    pc = get_point_clouds(sampled_data)
+    pc = get_point_clouds_from_dexycb(sampled_data)
     object_pose = sampled_data["object_pose"] # T x 7, 7=q+t, q=xyzw, t=xyz
     pc_ls = []
     for i in range(start_frame, object_pose.shape[0]):
@@ -239,7 +160,7 @@ def test(data_id: int = 4, robots: Optional[List[RobotName]] = [RobotName.allegr
         gt_hand_joints=hand_joints,
         hand_mesh=hand_meshes,
         show_axis=True,
-        filename=f"vis_results/{robot_name_str}_seq_{data_id}_qpos"
+        filename=f"/home/qianxu/Desktop/Project/DexPose/retarget/vis_results/{robot_name_str}_seq_{data_id}_qpos"
     )    
 
 
@@ -258,13 +179,13 @@ def run(data_id : int = 4, mode : str = "test", robots: Optional[List[RobotName]
 
 def test_multiple():
     # Example usage of the test function with multiple data IDs
-    data_ids = [0]
-    robots = [RobotName.inspire, 
-              RobotName.svh, 
-              RobotName.leap, 
-              RobotName.allegro, 
-              RobotName.shadow, 
-              RobotName.panda]  # List of robots to test
+    data_ids = [1]
+    robots = [RobotName.inspire, ]
+            #   RobotName.svh, 
+            #   RobotName.leap, 
+            #   RobotName.allegro, 
+            #   RobotName.shadow, 
+            #   RobotName.panda]  # List of robots to test
 
     for data_id in data_ids:
         for robot in robots:
