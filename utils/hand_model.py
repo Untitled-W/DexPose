@@ -3,7 +3,6 @@ import torch
 import pytorch_kinematics as pk
 import numpy as np
 import open3d as o3d
-from scipy.spatial.transform import Rotation 
 
 
 class HandModelURDF:
@@ -188,4 +187,34 @@ class HandModelURDF:
         return data
     
 
-    
+def load_robot(robot_name_str: str, side):
+
+    def urdf_name_map(robot_name, side):
+        name = {
+            'shadow': 'shadow_',
+            'leap': 'leap_',
+            'svh': 'schunk_svh_',
+            'allegro': 'allegro_',
+            'barrett': 'barrett_',
+            'inspire': 'inspire_',
+            'panda': 'panda_gripper',
+        }
+        if robot_name == 'panda': return name[robot_name]
+        return name[robot_name] + 'hand_' + side
+
+    asset_name_map = {
+        'shadow': 'shadow_hand',
+        'leap': 'leap_hand',
+        'svh': 'schunk_hand',
+        'allegro': 'allegro_hand',
+        'barrett': 'barrett_hand',
+        'inspire': 'inspire_hand',
+        'panda': 'panda_gripper',
+    }
+
+    robot = HandModelURDF(robot_name_str,
+                          f'/home/qianxu/Desktop/Project/DexPose/retarget/urdf/{urdf_name_map(robot_name_str, side)}_glb.urdf',
+                          f'/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/{asset_name_map[robot_name_str]}/meshes',
+                        )
+
+    return robot

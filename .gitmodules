@@ -4,3 +4,6 @@
 [submodule "thirdparty/dex-retargeting"]
 	path = thirdparty/dex-retargeting
 	url = https://github.com/dexsuite/dex-retargeting.git
+[submodule "thirdparty/manopth"]
+	path = thirdparty/manopth
+	url = https://github.com/hassony2/manopth

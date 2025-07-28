@@ -1,21 +1,3 @@
-#!/usr/bin/env python3
-"""
-Unified Visualization Utilities
-
-This module provides simplified, unified visualization functions for:
-- Point clouds with different color representations (RGB, features, etc.)
-- Meshes from PyTorch3D
-- Combined point cloud and mesh visualization
-- Multi-viewpoint calibration testing
-- Mesh renderer feature visualization (PCA and matching methods)
-
-The goal is to provide simple functions without complex class structures,
-suitable for testing multi-camera calibration effects and feature analysis.
-
-Author: Assistant
-Date: 2025-06-24
-"""
-
 import numpy as np
 import torch
 import os
@@ -23,18 +5,28 @@ from typing import List, Dict, Optional, Tuple, Union
 import warnings
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-import time
-import tqdm
 from pytorch3d.ops import sample_farthest_points, ball_query
 from pytorch3d.structures import Meshes
+from pytorch3d.transforms import (
+    quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion, quaternion_to_axis_angle
+)
+from pytransform3d import transformations as pt
 from plotly.colors import get_colorscale
 import plotly.graph_objects as go
 import plotly.offline as pyo
 import open3d as o3d
 # from manotorch.manolayer import ManoLayer
-from mano_layer import ManoLayer
+from manopth.manolayer import ManoLayer
 
-import sys; sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from .tools import (cosine_similarity, 
+                    farthest_point_sampling, 
+                    compute_hand_geometry, 
+                    get_point_clouds_from_human_data,
+                    apply_transformation_human_data)
+from .mano_layer import MANOLayer
+from .hand_model import load_robot
+# from .viewer import RobotHandDatasetSAPIENViewer
+from dataset.base_structure import HumanSequenceData, DexSequenceData
 
 
 def arange_pixels(
@@ -397,6 +389,23 @@ def _extract_mesh_data(mesh: Union[Meshes, Dict]) -> Tuple[np.ndarray, np.ndarra
     
     else:
         raise ValueError("Unsupported mesh format. Use PyTorch3D Meshes or dict with 'vertices' and 'faces' keys")
+
+
+def _extract_hand_points_and_mesh(hand_tsls, hand_coeffs, side):
+    if side == 0:
+        mano_layer = ManoLayer(center_idx=0, side='left', use_pca=False).cuda()
+    else:
+        mano_layer = ManoLayer(center_idx=0, side='right', use_pca=False).cuda()
+
+    # import pickle
+    # with open("a_pps.pkl", "wb") as f:
+    #     pickle.dump(hand_coeffs, f)
+
+    hand_verts, hand_joints = mano_layer(quaternion_to_axis_angle(hand_coeffs.to('cuda')).reshape(-1, 48)) # manopth use axis_angle and should be (B, 48)
+    hand_joints = hand_joints.cpu().numpy() * 0.001 # if using manotorch, you don't need that!
+    hand_joints += hand_tsls.cpu().numpy()[:,None,:]
+
+    return hand_joints, None
 
 
 
@@ -819,9 +828,7 @@ def vis_frames_plotly(pc_ls:List[np.ndarray]=None, hand_pts_ls:List[np.ndarray]=
         T = len(hand_mesh)
     else:
         T = pc_ls[0].shape[0] if pc_ls is not None else gt_hand_joints.shape[0]
-        
-    initial_data = vis_pc_coor_plotly(pc_ls=get_subitem(pc_ls, 0), 
-                                      hand_pts_ls=get_subitem(hand_pts_ls, 0), 
+    initial_data = vis_pc_coor_plotly(pc_ls=get_subitem(pc_ls, 0), hand_pts_ls=get_subitem(hand_pts_ls, 0), 
                                       transformation_ls=get_subitem(transformation_ls, 0), 
                                       gt_transformation_ls=get_subitem(gt_transformation_ls, 0),
                                         gt_posi_pts=get_subitem(gt_posi_pts, 0), posi_pts_ls=get_subitem(posi_pts_ls, 0),
@@ -831,8 +838,7 @@ def vis_frames_plotly(pc_ls:List[np.ndarray]=None, hand_pts_ls:List[np.ndarray]=
                                         return_data=True, )
     frames = []
     for t in range(T):
-        data = vis_pc_coor_plotly(pc_ls=get_subitem(pc_ls, t), 
-                                  hand_pts_ls=get_subitem(hand_pts_ls, t), 
+        data = vis_pc_coor_plotly(pc_ls=get_subitem(pc_ls, t), hand_pts_ls=get_subitem(hand_pts_ls, t), 
                                   transformation_ls=get_subitem(transformation_ls, t), 
                                   gt_transformation_ls=get_subitem(gt_transformation_ls, t),
                                     gt_posi_pts=get_subitem(gt_posi_pts, t), posi_pts_ls=get_subitem(posi_pts_ls, t),
@@ -901,209 +907,149 @@ def vis_frames_plotly(pc_ls:List[np.ndarray]=None, hand_pts_ls:List[np.ndarray]=
         os.remove('temp_vis.html')
 
 
-def get_vis_dex_keypoints_with_color_gradient_and_lines(gt_posi_pts: np.ndarray, finger_groups, color_scale='Viridis', emphasize_idx=None):
-    """
-    Visualize the dex hand key points with different colors for different fingers,
-    decreasing opacity based on the distance from the root point, and add lines
-    connecting points within each finger and from the root to the root of each finger.
-
-    Args:
-        gt_posi_pts (np.ndarray): Ground truth position points (21 hand keypoints)
-        color_scale (str): The color scale to use (e.g., 'Viridis')
-    """
-
-    # Get colors from the specified color scale
-    color_scale_vals = get_colorscale(color_scale)
-
-    data = []
+def visualize_human_sequence(seq_data: HumanSequenceData, filename: Optional[str] = None):
     
-    for i, (finger_name, indices) in enumerate(finger_groups.items()):
-        # Get a color for this finger from the color scale
-        finger_color = color_scale_vals[i % len(color_scale_vals)]
+    # Example: extract hand and object data for visualization
+    obj_mesh = []
+    for mesh_path in seq_data.object_mesh_path:
+        if os.path.exists(mesh_path):
+            obj_mesh.append(o3d.io.read_triangle_mesh(mesh_path))
+        else:
+            obj_mesh.append(None)
+    original_pc = [np.asarray(mesh.vertices) for mesh in obj_mesh if mesh is not None]
 
-        # Add points and lines within each finger
-        for j, idx in enumerate(indices):
-            # Calculate the opacity based on the distance from the root (first point in the group)
-            opacity = 1.0 - (j / (len(indices)))  # Linear decrease in opacity
+    original_pc_ls = [
+            farthest_point_sampling(torch.from_numpy(points).unsqueeze(0), 1000)[:1000]  for points in original_pc
+        ]
+    pc_ds = [pc[pc_idx] for pc, pc_idx in zip(original_pc, original_pc_ls)]
 
-            # Add the keypoint with the appropriate color and opacity
-            if emphasize_idx is not None and idx == emphasize_idx:
-                data.append(go.Scatter3d(
-                    x=[gt_posi_pts[idx, 0]], 
-                    y=[gt_posi_pts[idx, 1]], 
-                    z=[gt_posi_pts[idx, 2]], 
-                    mode='markers', 
-                    marker=dict(size=15, color='green', opacity=1), 
-                    name=f"{finger_name} {j+1}",
-                    showlegend=False
-                ))
+    if seq_data.which_dataset == 'TACO':
+        for i in range(len(pc_ds)):
+            pc_ds[i] *= 0.01
+
+    obj_pc = [] # should be (T, N, 3) of len k
+    for pc, obj_trans in zip(pc_ds, seq_data.obj_poses):
+        t_frame_pc = []
+        for t_trans in obj_trans:
+            t_frame_pc.append(pt_transform(pc, t_trans.cpu().numpy()))
+        obj_pc.append(np.array(t_frame_pc))
+    pc_ls = []
+    for t in range(len(seq_data.hand_tsls)):
+        pc_ls.append(np.concatenate([pc[t] for pc in obj_pc], axis=0))
+    pc_ls = [np.asarray(pc_ls)] 
+
+    mano_hand_joints, hand_verts = _extract_hand_points_and_mesh(seq_data.hand_tsls, seq_data.hand_coeffs, seq_data.side)
+
+    ######
+
+    if seq_data.which_dataset == 'DexYCB' and False:
+
+        hand_type = 'left' if seq_data.side == 0 else 'right'
+
+        extrinsic_mat = seq_data.extra_info["extrinsics"] 
+        pose_vec = pt.pq_from_transform(extrinsic_mat)
+        camera_pose = torch.eye(4)
+        camera_pose[:3, :3] = quaternion_to_matrix(torch.from_numpy(pose_vec[3:7]))
+        camera_pose[:3, 3] = torch.from_numpy(pose_vec[0:3])
+        camera_pose = camera_pose.numpy()
+        camera_pose = np.linalg.inv(camera_pose)
+
+        hand_pose_frame = torch.cat([quaternion_to_axis_angle(seq_data.hand_coeffs).reshape(-1, 48), seq_data.hand_tsls], dim=-1).unsqueeze(1).numpy()
+
+        hand_joints = []
+        mano_layer = ManoLayer(center_idx=0, side=hand_type, use_pca=False)
+        xx = ManoLayer(
+            flat_hand_mean=False,
+            ncomps=45,
+            side=hand_type,
+            use_pca=True,
+        )
+            
+        for i in range(hand_pose_frame.shape[0]):
+
+            if np.abs(hand_pose_frame[i]).sum() < 1e-5:
+                joint = joint = np.zeros((21, 3), dtype=np.float32)
             else:
-                data.append(go.Scatter3d(
-                    x=[gt_posi_pts[idx, 0]], 
-                    y=[gt_posi_pts[idx, 1]], 
-                    z=[gt_posi_pts[idx, 2]], 
-                    mode='markers', 
-                    marker=dict(size=10, color=finger_color[1], opacity=opacity), 
-                    name=f"{finger_name} {j+1}",
-                    showlegend=False
-                ))
+                p = torch.from_numpy(hand_pose_frame[i][:, :48].astype(np.float32))
+                p[:,3:] = p[:,3:].mm(xx.th_selected_comps) + xx.th_hands_mean
+                t = torch.from_numpy(hand_pose_frame[i][:, 48:51].astype(np.float32))
+                # vertex, joint = mano_layer(p, th_trans=t)
+                # joint = joint.cpu().numpy()[0] * 0.001
+                # joint += t.cpu().numpy()
+                # p: shape(1, 48), t: shape(1, 3)
+                vertex, joint = mano_layer(p)
+                joint = joint.cpu().numpy()[0] * 0.001 # (21, 3)
+                t_offset = xx(p)[1].cpu().numpy()[0] * 0.001 # (21, 3)
+                joint += t.cpu().numpy() + t_offset[0]
+                print(t_offset[0])
 
-            # Add lines between points within the finger
-            if j > 0:
-                prev_idx = indices[j - 1]
-                data.append(go.Scatter3d(
-                    x=[gt_posi_pts[prev_idx, 0], gt_posi_pts[idx, 0]], 
-                    y=[gt_posi_pts[prev_idx, 1], gt_posi_pts[idx, 1]], 
-                    z=[gt_posi_pts[prev_idx, 2], gt_posi_pts[idx, 2]], 
-                    mode='lines', 
-                    line=dict(color=finger_color[1], width=10),
-                    name=f"{finger_name} Line {j}",
-                    showlegend=False
-                ))
+            joint = joint @ camera_pose[:3, :3].T + camera_pose[:3, 3]
+            joint = np.ascontiguousarray(joint)
+            hand_joints.append(joint)
 
-        # Add lines from the root (index 0) to the root of each finger (index 5, 9, 13, 17)
-        if indices[0] != 0:
-            data.append(go.Scatter3d(
-                x=[gt_posi_pts[0, 0], gt_posi_pts[indices[0], 0]], 
-                y=[gt_posi_pts[0, 1], gt_posi_pts[indices[0], 1]], 
-                z=[gt_posi_pts[0, 2], gt_posi_pts[indices[0], 2]], 
-                mode='lines', 
-                line=dict(color=finger_color[1], width=12,), 
-                name=f"Root to {finger_name}",
-                showlegend=False
-            ))
-    return data
+        mano_hand_joints = torch.tensor(hand_joints, dtype=torch.float32)
 
+    ######
 
-def vis_dex_pc_coor_plotly(pc_ls: List[np.ndarray] = None, 
-                            gt_hand_joints: np.ndarray = None, 
-                            dex_mesh: List[o3d.cuda.pybind.geometry.TriangleMesh] = None,
-                            show_axis: bool = False, 
-                            filename: str = None) -> None:
-    """
-    Visualize point clouds and ground truth hand joints in Plotly.
-    
-    Args:
-        pc_ls (List[np.ndarray]): List of point clouds.
-        gt_hand_joints (np.ndarray): Ground truth hand joints.
-        show_axis (bool): Whether to show axis in the visualization.
-        filename (str): Filename to save the visualization.
-    """
-    data = []
-
-    for i, pc in enumerate(pc_ls):
-        data.append(go.Scatter3d(
-            x=pc[:, 0], y=pc[:, 1], z=pc[:, 2],
-            mode='markers',
-            marker=dict(size=5, color='purple'),
-            name=f"Point Cloud {i+1}"
-        ))
-
-    data.extend(get_vis_hand_keypoints_with_color_gradient_and_lines(gt_hand_joints, color_scale='Bluered'))
-
-    for i, hand_mesh in enumerate(dex_mesh):
-        if type(hand_mesh) == o3d.cuda.pybind.geometry.TriangleMesh:
-            verts = np.asarray(hand_mesh.vertices)
-            faces = np.asarray(hand_mesh.triangles)
-        else: 
-            verts = np.asarray(hand_mesh.vertices)
-            faces = np.asarray(hand_mesh.faces)
-        data.append(go.Mesh3d(x=verts[:, 0], y=verts[:, 1], z=verts[:, 2], 
-                                i=faces[:, 0], j=faces[:, 1], k=faces[:, 2], 
-                                color='royalblue',
-                                name=f"Hand Mesh {i}"))
-
-    fig = go.Figure(data=data)
-    fig.update_layout(scene=dict(
-        aspectmode='data',
-        xaxis_visible=show_axis,
-        yaxis_visible=show_axis,
-        zaxis_visible=show_axis,
-        xaxis=dict(backgroundcolor="rgba(0,0,0,0)"),
-        yaxis=dict(backgroundcolor="rgba(0,0,0,0)"),
-        zaxis=dict(backgroundcolor="rgba(0,0,0,0)")
-    ),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)")
-
-    return data
-
-
-def vis_dex_frames_plotly(pc_ls: List[np.ndarray] = None, 
-                          gt_hand_joints: np.ndarray = None, 
-                          dex_mesh: List[o3d.cuda.pybind.geometry.TriangleMesh] = None,
-                          show_axis: bool = False, 
-                          filename: str = None):
-    """
-    Visualize point clouds and ground truth hand joints as frames in Plotly.
-    """
-    print(len(pc_ls), pc_ls[0].shape)
-    T = len(pc_ls) if pc_ls is not None else gt_hand_joints.shape[0]
-
-    initial_data = vis_dex_pc_coor_plotly(pc_ls=get_subitem(pc_ls, 0), 
-                                        gt_hand_joints=get_subitem(gt_hand_joints, 0),
-                                        dex_mesh=dex_mesh,
-                                        show_axis=show_axis)
-    frames = []
-    for t in range(T):
-        data = vis_dex_pc_coor_plotly(pc_ls=get_subitem(pc_ls, t), 
-                                    gt_hand_joints=get_subitem(gt_hand_joints, t),
-                                    dex_mesh=dex_mesh,
-                                    show_axis=show_axis)
-        frames.append(go.Frame(data=data, name=f"Frame {t}"))
-
-    slider_steps = []
-    for t in range(T):
-        step = {
-            'args': [[f"Frame {t}"], {'frame': {'duration': 0, 'redraw': True}, 'mode': 'immediate', 'transition': {'duration': 0}}],
-            'label': f"{t}",
-            'method': 'animate'
-        }
-        slider_steps.append(step)
-
-    layout = go.Layout(
-        scene=dict(
-            aspectmode='data',
-            xaxis_visible=show_axis,
-            yaxis_visible=show_axis,
-            zaxis_visible=show_axis,
-            xaxis=dict(backgroundcolor="rgba(0,0,0,0)"),
-            yaxis=dict(backgroundcolor="rgba(0,0,0,0)"),
-            zaxis=dict(backgroundcolor="rgba(0,0,0,0)")
-        ),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        updatemenus=[{
-            'type': 'buttons',
-            'buttons': [
-                {'label': 'Play', 'method': 'animate', 'args': [None, {'frame': {'duration': 100, 'redraw': True}, 'fromcurrent': True, 'mode': 'immediate'}]},
-                {'label': 'Pause', 'method': 'animate', 'args': [[None], {'frame': {'duration': 0, 'redraw': False}, 'mode': 'immediate'}]},
-            ]
-        }],
-        sliders=[{
-            'active': 0,
-            'yanchor': 'top',
-            'xanchor': 'left',
-            'currentvalue': {
-                'font': {'size': 20},
-                'prefix': 'Frame:',
-                'visible': True,
-                'xanchor': 'right'
-            },
-            'transition': {'duration': 0},
-            'pad': {'b': 10, 't': 50},
-            'len': 0.9,
-            'x': 0.1,
-            'y': 0,
-            'steps': slider_steps
-        }]
+    # Visualize using vis_frames_plotly
+    vis_frames_plotly(
+        pc_ls=pc_ls, # should be a list, len 1, (T, N, 3)
+        gt_hand_joints=mano_hand_joints, # should be a tensor, (T, 21, 3)
+        show_axis=True,
+        filename=filename if filename else None
     )
 
-    fig = go.Figure(data=initial_data, layout=layout, frames=frames)
-    if filename is not None:
-        fig.write_html(f'{filename}.html')
-    else:
-        import webbrowser
-        fig.write_html('temp_vis.html')
-        webbrowser.open('temp_vis.html')
-        os.remove('temp_vis.html')
+
+def visualize_dex_hand_sequence(seq_data: DexSequenceData, filename: Optional[str] = None):
+    """
+    Visualize a sequence of dexterous hand movements.
+    
+    Args:
+        seq_data (DexHandSequenceData): The sequence data containing hand poses and meshes.
+        filename (Optional[str]): If provided, save the visualization to this file.
+    """
+    data_id = seq_data.which_dataset + "_" + seq_data.which_sequence
+    hand_type = 'left' if seq_data.side == 0 else 'right'
+    robot_name_str = seq_data.which_hand
+    fps = 10
+
+    robot = load_robot(robot_name_str, hand_type)
+
+    ### hand meshes ###
+    hand_meshes = []
+    for i in range(seq_data.hand_poses.shape[0]):
+        robot.set_qpos(torch.from_numpy(seq_data.hand_poses[i].astype(np.float32)))
+        hand_mesh = robot.get_hand_mesh()
+        # print(len(hand_mesh.vertices), len(hand_mesh.triangles))
+        hand_meshes.append(hand_mesh)
+
+
+    ### hand joints ###
+    hand_joints = []
+    
+    hand_pose = torch.cat([quaternion_to_axis_angle(seq_data.hand_coeffs).reshape(-1, 48), seq_data.hand_tsls], dim=-1)
+    hand_pose = hand_pose.unsqueeze(1).numpy()  # Convert to numpy array
+
+    mano_layer = MANOLayer(hand_type, np.zeros(10).astype(np.float32))
+    for i in range(hand_pose.shape[0]):
+        joint = compute_hand_geometry(hand_pose[i], mano_layer= mano_layer)
+        hand_joints.append(joint)
+    hand_joints = torch.tensor(hand_joints, dtype=torch.float32)
+
+
+
+    ### point clouds ###
+    pc = get_point_clouds_from_human_data(seq_data)
+    pc_ls = apply_transformation_human_data(pc, seq_data.obj_poses)
+    pc_ls = [pc_ls] # due to some dim issue
+
+
+    vis_frames_plotly(
+        pc_ls=pc_ls,
+        gt_hand_joints=hand_joints,
+        hand_mesh=hand_meshes,
+        show_axis=True,
+        filename=f"/home/qianxu/Desktop/Project/DexPose/retarget/vis_results/{robot_name_str}_seq_{data_id}_qpos"
+    )    
+
+    
