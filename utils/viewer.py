@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Dict, List, Optional, Union
-
+import os
 import cv2
 from tqdm import trange
 import numpy as np
@@ -12,6 +12,7 @@ from pytorch3d.transforms import quaternion_to_axis_angle, matrix_to_quaternion
 from sapien import internal_renderer as R
 from sapien.asset import create_dome_envmap
 from sapien.utils import Viewer
+from manopth.manolayer import ManoLayer
 
 from dex_retargeting import yourdfpy as urdf
 from dex_retargeting.constants import (
@@ -23,8 +24,8 @@ from dex_retargeting.constants import (
 from dex_retargeting.retargeting_config import RetargetingConfig
 from dex_retargeting.seq_retarget import SeqRetargeting
 
-from utils.mano_layer import MANOLayer
 from dataset.base_structure import HumanSequenceData, DexSequenceData
+from utils.tools import extract_hand_points_and_mesh
 
 
 def compute_smooth_shading_normal_np(vertices, indices):
@@ -148,7 +149,6 @@ class HandDatasetSAPIENViewer:
             np.zeros(4), np.array([0.96, 0.75, 0.69, 1]), 0.0, 0.8, 0
         )
 
-        self.mano_layer: Optional[MANOLayer] = None
         self.mano_face: Optional[np.ndarray] = None
         self.objects: List[sapien.Entity] = []
         self.nodes: List[R.Node] = []
@@ -160,7 +160,6 @@ class HandDatasetSAPIENViewer:
             actor = self.objects.pop()
             self.scene.remove_actor(actor)
         self.clear_node()
-        self.mano_layer = None
 
     def clear_node(self):
         for _ in range(len(self.nodes)):
@@ -173,8 +172,12 @@ class HandDatasetSAPIENViewer:
         for data_id, mesh_file in zip(data_ids, mesh_files):
             self._load_object(data_id, mesh_file)
 
-        self.mano_layer = MANOLayer("right", np.zeros(10).astype(np.float32))
-        self.mano_face = self.mano_layer.f.cpu().numpy()
+        self.mano_face = ManoLayer(
+            flat_hand_mean=False,
+            ncomps=45,
+            side="left" if data.side == 0 else "right",
+            use_pca=True,
+        ).th_faces.cpu().numpy()
 
     def _load_object(self, name, mesh_file):
         builder = self.scene.create_actor_builder()
@@ -182,18 +185,6 @@ class HandDatasetSAPIENViewer:
         actor = builder.build_static(name=name)
         self.objects.append(actor)
 
-
-    def _compute_hand_geometry(self, hand_pose_frame, use_camera_frame=False):
-        # pose parameters all zero, no hand is detected
-        if np.abs(hand_pose_frame).sum() < 1e-5:
-            return None, None
-        p = torch.from_numpy(hand_pose_frame[:, :48].astype(np.float32))
-        t = torch.from_numpy(hand_pose_frame[:, 48:51].astype(np.float32))
-        vertex, joint = self.mano_layer(p, t)
-        vertex = vertex.cpu().numpy()[0]
-        joint = joint.cpu().numpy()[0]
-
-        return vertex, joint
 
     def _update_hand(self, vertex):
         self.clear_node()
@@ -253,9 +244,9 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 str(urdf_path), add_dummy_free_joints=True, build_scene_graph=False
             )
             urdf_name = urdf_path.name
-            # temp_dir = tempfile.mkdtemp(prefix="dex_retargeting-")
-            # temp_path = str(Path(__file__).parent / "urdf" / urdf_name)
             temp_path = 'retarget/urdf/' + urdf_name
+            if not os.path.exists('retarget/urdf'):
+                os.makedirs('retarget/urdf')
             robot_urdf.write_xml_file(temp_path)
             print(temp_path)
 
@@ -418,9 +409,6 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             local_pose.set_p(np.array([1.5, global_y_offset, 1]))
             self.camera.set_local_pose(local_pose)
 
-        hand_pose = torch.cat([quaternion_to_axis_angle(data.hand_coeffs).reshape(-1, 48), data.hand_tsls], dim=-1)
-        hand_pose = hand_pose.unsqueeze(1).numpy()  # Convert to numpy array
-
         # from 4 x 4 matrix to 7D vector
         object_pose = data.obj_poses  # N x T x 4 x 4
         object_tsl = object_pose[..., :3, 3]  # N x T x 3
@@ -429,7 +417,7 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
         object_quat = torch.cat([object_quat[:, :, 3:], object_quat[..., :3]], axis=-1)
         object_pose = torch.cat([object_quat, object_tsl], axis=-1).numpy()  # N x T x 7
 
-        num_frame = hand_pose.shape[0]
+        num_frame = object_pose.shape[1]
         num_copy = len(self.robots) + 1
         num_ycb_objects = len(data.object_names)
         pose_offsets = []
@@ -443,27 +431,17 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
         # Prepare to save qpos
         qpos_dict = {robot_name: [] for robot_name in self.robot_names}
 
-        # Skip frames where human hand is not detected in DexYCB dataset
         start_frame = 0
-        for i in range(0, num_frame):
-            init_hand_pose_frame = hand_pose[i]
-            vertex, joint = self._compute_hand_geometry(init_hand_pose_frame)
-            if vertex is not None:
-                start_frame = i
-                break
-
         # Warm start
-        hand_pose_start = hand_pose[start_frame]
-        wrist_quat = rotations.quaternion_from_compact_axis_angle(
-            hand_pose_start[0, 0:3]
-        )
-        vertex, joint = self._compute_hand_geometry(hand_pose_start)
-        
+        joints, vertex = extract_hand_points_and_mesh(data.hand_tsls[start_frame], data.hand_coeffs[start_frame], data.side)
+        joints = joints.squeeze(0)
+        wrist_quat = data.hand_coeffs[start_frame, 0]
+
         for robot, retargeting, retarget2sapien in zip(
             self.robots, self.retargetings, self.retarget2sapien
         ):
             retargeting.warm_start(
-                joint[0, :],
+                joints[0, :],
                 wrist_quat,
                 hand_type=self.hand_type,
                 is_mano_convention=True,
@@ -472,8 +450,11 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
         # Loop rendering
         for i in trange(start_frame, num_frame):
             object_pose_frame = object_pose[:, i, ...]
-            hand_pose_frame = hand_pose[i]
-            vertex, joint = self._compute_hand_geometry(hand_pose_frame)
+            joints, vertex = extract_hand_points_and_mesh(data.hand_tsls[i], data.hand_coeffs[i], data.side)
+            joints = joints.squeeze(0)
+            vertex = vertex.squeeze(0)
+
+            print("Frame:", i, "Joints:", joints)
 
             # Update poses for YCB objects
             for k in range(num_ycb_objects):
@@ -497,18 +478,47 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             self.robots, self.retargetings, self.retarget2pk, self.retarget2sapien, self.robot_names
             ):
                 indices = retargeting.optimizer.target_link_human_indices
-                ref_value = joint[indices, :]
+                ref_value = joints[indices, :]
+                print("Frame:", i, "Ref value:", ref_value)
                 qpos_retarget = retargeting.retarget(ref_value)
                 qpos_sapien = qpos_retarget[retarget2sapien]
                 qpos_pk = qpos_retarget[retarget2pk]
+                print("Frame:", i, "Qpos Sapien:", qpos_sapien)
+                print("Frame:", i, "Qpos PK:", qpos_pk)
                 robot.set_qpos(qpos_sapien)
                 qpos_dict[robot_name].append(qpos_pk.copy())
 
         # Save qpos to disk as npy files
-        # save_dir = Path(__file__).parent.resolve() / "hand_qpos"
-        save_dir = Path('retarget/hand_qpos')
-        save_dir.mkdir(parents=True, exist_ok=True)
+        # save_dir = Path('retarget/hand_qpos')
+        # save_dir.mkdir(parents=True, exist_ok=True)
+        retargeted_data = []
         for robot_name, qpos_list in qpos_dict.items():
-            qpos_arr = np.stack(qpos_list, axis=0)
-            np.save(save_dir / f"{str(robot_name).split('.')[-1]}_seq_{data_id}_qpos.npy", qpos_arr)
+            qpos_arr = torch.from_numpy(np.stack(qpos_list, axis=0).astype(np.float32))
+            robot_name_str= str(robot_name).split('.')[-1]
+            # np.save(save_dir / f"{str(robot_name).split('.')[-1]}_{data_id}.npy", qpos_arr)
+            retargeted_data.append(DexSequenceData(
+                which_hand=robot_name_str,
+                hand_poses=qpos_arr,
+                side=data.side,
 
+                hand_tsls=data.hand_tsls,
+                hand_coeffs=data.hand_coeffs,
+
+                obj_poses=data.obj_poses,
+                obj_point_clouds=None,
+                obj_feature=None,
+                object_names=data.object_names,
+                object_mesh_path=data.object_mesh_path,
+
+                frame_indices= data.frame_indices,
+                task_description=data.task_description,
+                which_dataset=data.which_dataset,
+                which_sequence=data.which_sequence,
+                extra_info=data.extra_info
+            ))
+
+            print("QPOS:")
+            for i, q in enumerate(qpos_arr):
+                print(f"Frame {i}: {q}")
+
+        return retargeted_data

@@ -12,19 +12,19 @@ from tqdm import tqdm
 ORIGIN_DATA_PATH = {
     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco",
     "Oakinkv2": '/home/qianxu/Desktop/New_Folder/OakInk2/OakInk-v2-hub',
-    'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
+    'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/data/DexYCB/dex-ycb-20210415'
 }
 
 HUMAN_SEQ_PATH = {
     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/human_save",
     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/human_save",
-    'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data/human_save'
+    'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/data/DexYCB/dex-ycb-20210415/human_save'
 }
 
 DEX_SEQ_PATH = {
     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/dex_save",
     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/dex_save",
-    'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
+    'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/data/DexYCB/dex-ycb-20210415/dex_save'
 }
 
 # HumanSequenceData

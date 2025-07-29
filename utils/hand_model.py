@@ -19,10 +19,11 @@ class HandModelURDF:
         device: str | torch.Device
             device for torch tensors
         """
-        if device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            self.device = device
+        # if device is None:
+        #     self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # else:
+        #     self.device = device
+        self.device = 'cpu'
 
         if urdf_path is None:
             urdf_path = f'robot_models/{robot_name}.urdf'
@@ -213,7 +214,7 @@ def load_robot(robot_name_str: str, side):
     }
 
     robot = HandModelURDF(robot_name_str,
-                          f'/home/qianxu/Desktop/Project/DexPose/retarget/urdf/{urdf_name_map(robot_name_str, side)}_glb.urdf',
+                          f'/home/qianxu/Desktop/Project/DexPose/retarget_test/urdf/{urdf_name_map(robot_name_str, side)}_glb.urdf',
                           f'/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/{asset_name_map[robot_name_str]}/meshes',
                         )
 

@@ -456,18 +456,26 @@ class DexYCBProcessor(BaseDatasetProcessor):
 
     def _load_sequence_data(self, data_item):
         seq_data =  self.dataset[data_item]
+
+        start_frame = 0
+        for i in range(0, len(seq_data['hand_pose'])):
+            hand_pose_frame = seq_data['hand_pose'][i]
+            if np.abs(hand_pose_frame).sum() > 1e-5:
+                start_frame = i
+                break
+
         return [{
                 'which_dataset': 'DexYCB',
                 'which_sequence': seq_data['capture_name'],
                 'side': 'r',
                 'obj_names': YCB_CLASSES[seq_data['ycb_ids'][0]],
-                'frame_indices': list(range(0, len(seq_data['hand_pose']), self.task_interval)),
-                'hand_pose': seq_data['hand_pose'],
-                'object_pose': seq_data['object_pose'],
+                'frame_indices': list(range(0, len(seq_data['hand_pose'])-start_frame, self.task_interval)),
+                'hand_pose': seq_data['hand_pose'][start_frame:],
+                'object_pose': seq_data['object_pose'][start_frame:],
                 'extrinsics': seq_data['extrinsics'],
                 'object_mesh_file': seq_data['object_mesh_file'][0],
                 'description': "",
-                'extra_info': {'extrinsics': seq_data['extrinsics']},
+                # 'extra_info': {'extrinsics': seq_data['extrinsics']},
                 'anno': "",
                 'l_valid': False,
                 'r_valid': True
@@ -554,7 +562,7 @@ DATASET_CONFIGS = {
         'task_interval': 20,
         'which_dataset': 'Oakinkv2',
         'seq_data_name': 'debug',
-        'sequence_indices': list(range(0, 50))  # Example sequence indices for processing
+        # 'sequence_indices': list(range(0, 50))  # Example sequence indices for processing
     },
     
     'taco': {
@@ -762,7 +770,7 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
     for dataset_name, data_list in dataset_data.items():
         print(f"Dataset {dataset_name} has {len(data_list)} sequences")
         # Sample a few sequences for visualization
-        sampled_data = random.sample(data_list, 10)
+        sampled_data = random.sample(data_list, 2)
         for d in sampled_data:
             print(f"Visualizing sequence {d.which_sequence}")
             visualize_human_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/dataset/vis_results/{d.which_dataset}_{d.which_sequence}.html')
@@ -770,7 +778,7 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
 
 if __name__ == "__main__":
 
-    dataset_names = ['dexycb', 'taco', 'oakinkv2']
+    dataset_names = ['dexycb']#, 'taco', 'oakinkv2']
     processed_data = []
     
     GENERATE = True
@@ -785,4 +793,4 @@ if __name__ == "__main__":
 
     # show_human_statistics(processed_data)
     
-    check_data_correctness_by_vis(processed_data)
+    # check_data_correctness_by_vis(processed_data)

@@ -4,7 +4,7 @@ urdf
 hand_qpos
 vis_results
 test.py
-*.urdf
+retarget_test
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
