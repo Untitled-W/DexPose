@@ -18,7 +18,8 @@ from pytorch3d.transforms import (
     quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion, quaternion_to_axis_angle
 )
 from pytransform3d import transformations as pt
-from manopth.manolayer import ManoLayer
+# from manopth.manolayer import ManoLayer
+from manotorch.manolayer import ManoLayer
 
 
 
@@ -767,10 +768,9 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
             print(f"Visualizing sequence {d.which_sequence}")
             visualize_human_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/dataset/vis_results/{d.which_dataset}_{d.which_sequence}.html')
 
-
 if __name__ == "__main__":
 
-    dataset_names = ['dexycb', 'taco', 'oakinkv2']
+    dataset_names = ['taco']
     processed_data = []
     
     GENERATE = True
