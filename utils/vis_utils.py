@@ -19,8 +19,8 @@ from plotly.colors import get_colorscale
 import plotly.graph_objects as go
 import plotly.offline as pyo
 import open3d as o3d
-# from manotorch.manolayer import ManoLayer
-from manopth.manolayer import ManoLayer
+from manotorch.manolayer import ManoLayer
+# from manopth.manolayer import ManoLayer
 
 from .tools import (cosine_similarity, 
                     farthest_point_sampling, 
@@ -28,9 +28,6 @@ from .tools import (cosine_similarity,
                     get_point_clouds_from_human_data,
                     apply_transformation_human_data)
 from .hand_model import load_robot
-# from .viewer import RobotHandDatasetSAPIENViewer
-from dataset.base_structure import HumanSequenceData, DexSequenceData
-
 
 def arange_pixels(
     resolution=(128, 128),
@@ -829,7 +826,7 @@ def vis_frames_plotly(pc_ls:List[np.ndarray]=None, hand_pts_ls:List[np.ndarray]=
         os.remove('temp_vis.html')
 
 
-def visualize_human_sequence(seq_data: HumanSequenceData, filename: Optional[str] = None):
+def visualize_human_sequence(seq_data, filename: Optional[str] = None):
     
     ##  Visualize Object Point Clouds ##
     pc = get_point_clouds_from_human_data(seq_data)
@@ -848,7 +845,7 @@ def visualize_human_sequence(seq_data: HumanSequenceData, filename: Optional[str
     )
 
 
-def visualize_dex_hand_sequence(seq_data: DexSequenceData, filename: Optional[str] = None):
+def visualize_dex_hand_sequence(seq_data, filename: Optional[str] = None):
     """
     Visualize a sequence of dexterous hand movements.
     

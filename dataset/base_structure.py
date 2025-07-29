@@ -7,22 +7,43 @@ import numpy as np
 import torch
 import open3d as o3d
 from tqdm import tqdm
+from data_process.mesh_renderer import MeshRenderer3D
+from data_process.vis_utils import visualize_pointclouds_and_mesh, get_multiview_dff, extract_pca, test_pca_matching
+from manotorch.manolayer import ManoLayer
+from utils.vis_utils import vis_pc_coor_plotly
 
+# ORIGIN_DATA_PATH = {
+#     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco",
+#     "Oakinkv2": '/home/qianxu/Desktop/New_Folder/OakInk2/OakInk-v2-hub',
+#     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
+# }
+
+# HUMAN_SEQ_PATH = {
+#     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/human_save",
+#     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/human_save",
+#     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data/human_save'
+# }
+
+# DEX_SEQ_PATH = {
+#     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/dex_save",
+#     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/dex_save",
+#     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
+# }
 
 ORIGIN_DATA_PATH = {
-    "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco",
+    "Taco": "/home/qianxu/Project24/TACO_Instructions/data",
     "Oakinkv2": '/home/qianxu/Desktop/New_Folder/OakInk2/OakInk-v2-hub',
     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/data/DexYCB/dex-ycb-20210415'
 }
 
 HUMAN_SEQ_PATH = {
-    "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/human_save",
+    "Taco": "/home/qianxu/Project25/DexPose/Taco/human_save",
     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/human_save",
     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/data/DexYCB/dex-ycb-20210415/human_save'
 }
 
 DEX_SEQ_PATH = {
-    "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/dex_save",
+    "Taco": "/home/qianxu/Project25/DexPose/Taco/dex_save",
     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/dex_save",
     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/data/DexYCB/dex-ycb-20210415/dex_save'
 }
@@ -104,7 +125,44 @@ class BaseDatasetProcessor(ABC):
         self.sequence_indices = sequence_indices if sequence_indices is not None else list(range(len(self.data_ls)))
 
         self.seq_save_path = f'{save_path}/seq_{seq_data_name}_{task_interval}.p'
+        self.renderer = MeshRenderer3D()
+        self.renderer.load_featurizer(ftype='sd_dinov2')
+        self.manolayer = ManoLayer(rot_mode='quat', side='right', use_pca=False).cuda()
 
+    @staticmethod
+    def orientation_to_elev_azim(orientation: np.ndarray) -> tuple:
+        """
+        Convert a 3D orientation vector to elevation and azimuth angles.
+        
+        Args:
+            orientation: 3D vector (unnormalized) pointing from object to camera position
+            
+        Returns:
+            tuple: (elevation, azimuth) in degrees
+                - elevation: angle above/below horizontal plane (-90 to 90 degrees)
+                - azimuth: angle around vertical axis (0 to 360 degrees)
+        """
+        # Normalize the orientation vector
+        norm = np.linalg.norm(orientation)
+        assert norm > 0, "Orientation vector must not be zero"
+        
+        orientation = orientation / norm
+        x, y, z = orientation
+        
+        # Calculate elevation (angle from horizontal plane)
+        elevation = np.arcsin(np.clip(z, -1.0, 1.0))
+        elevation_deg = np.degrees(elevation)
+        
+        # Calculate azimuth (angle in horizontal plane from positive x-axis)
+        # azimuth = arctan2(y, x)
+        azimuth = np.arctan2(y, x)
+        azimuth_deg = np.degrees(azimuth)
+        
+        # Ensure azimuth is in [0, 360) range
+        if azimuth_deg < 0:
+            azimuth_deg += 360.0
+        
+        return float(elevation_deg), float(azimuth_deg)
 
     @abstractmethod
     def _setup_paths(self):
@@ -165,23 +223,62 @@ class BaseDatasetProcessor(ABC):
         # Process hand data
         hand_tsl, hand_coeffs = self._get_hand_info(raw_data, side, frame_indices)
         if hand_tsl is None: return None
-
+        hand_dict = self.manolayer(hand_coeffs.reshape(-1, 16, 4), torch.zeros((hand_coeffs.shape[0], 10), device=hand_coeffs.device))
+        hand_joints = hand_dict.joints + hand_tsl[:, None, :3]  # T X 16 X 3
+        
         # Load object data
         object_transf_ls, object_name_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices)
         if object_transf_ls is None: return None
+
+        object_points_ls = []
+        object_features_ls = []
+        for idx, object_mesh_path in enumerate(object_mesh_path_ls):
+            self.renderer.load_mesh(object_mesh_path, scale=0.01)
+            orientation = hand_tsl[0].cpu().numpy() - object_transf_ls[idx][0, :3, 3]
+            elev, azim = self.orientation_to_elev_azim(orientation)
+            camera_params = [
+                {'elev': elev, 'azim': azim, 'fov': 60},     # hand orientation
+            ]
+            R_w2v, T_w2v = self.renderer.setup_cameras(camera_params, auto_distance=True)
+            self.renderer.render_views(image_size=256, lighting_type='ambient')
+            
+            self.renderer.extract_features(prompt="a product package, cracker box")
+            rgbs, depths, masks, points_ls, features = self.renderer.get_rendered_data()
+            all_points_dff, all_features_dff = get_multiview_dff(points_ls, masks, features,
+                                                    n_points=1000)
+            object_points_ls.append(all_points_dff)
+            object_features_ls.append(all_features_dff)
 
         # Convert to tensors and apply transformations
         obj_transf_ls = [yup2xup @ torch.from_numpy(obj_transf).float().to('cuda') 
                         if isinstance(obj_transf, np.ndarray) else yup2xup @ obj_transf.to('cuda') 
                         for obj_transf in object_transf_ls]
         
+
+        #### DEBUG CODE
+        obj_transf = obj_transf_ls[0]
+        obj_inv_transf = torch.inverse(obj_transf)
+        hand_inv_joints = hand_joints @ obj_inv_transf[:, :3, :3].transpose(1, 2) + obj_inv_transf[:, :3, 3].unsqueeze(1)
+        w2c = torch.eye(4).unsqueeze(0)
+        w2c[..., :3, :3] = R_w2v.cpu()
+        w2c[..., :3, 3] = T_w2v.cpu()
+        # obj_trans_points = object_points_ls[0].unsqueeze(0) @ obj_transf_ls[0][:, :3, :3].transpose(1, 2) + obj_transf_ls[0][:, :3, 3].unsqueeze(1)
+        vis_pc_coor_plotly([object_points_ls[0].cpu().numpy()], 
+                           gt_hand_joints=hand_inv_joints[0].cpu().numpy(),
+                           transformation_ls=torch.inverse(w2c), show_axis=True)
+        #### DEBUG CODE
+    
         sequence_data = HumanSequenceData(
             hand_tsls=hand_tsl.cpu(),
             hand_coeffs=hand_coeffs.cpu(),
             side=1 if side == 'r' else 0,
+            
             obj_poses=torch.stack(obj_transf_ls).cpu(),
             object_names=object_name_ls,
             object_mesh_path=object_mesh_path_ls,
+            object_points_ls = object_points_ls,
+            object_features_ls = object_features_ls,
+            
             frame_indices=frame_indices,
             which_dataset=raw_data['which_dataset'],
             which_sequence=raw_data['which_sequence'],
@@ -199,34 +296,15 @@ class BaseDatasetProcessor(ABC):
         
         # for idx in tqdm(range(len(self.data_ls)), desc=f"Processing {self.seq_data_name}"):
         for idx in tqdm(sequence_indices, desc=f"Processing {self.which_dataset}-{self.seq_data_name}"):
-
-            DEBUG = True
-
-            if DEBUG:
-                data_item = self.data_ls[idx]
-                sequence_list = self._load_sequence_data(data_item) 
-                
-                for seq_data in sequence_list:
-                    for side in ['l', 'r']:
-                        if seq_data.get(f'{side}_valid', True):  # Check if this side has valid data
-
-                            processed_seq = self.process_sequence(seq_data, side)
-                            if processed_seq is not None: whole_data_ls.append(processed_seq)
-            else:
-                try:
-                    data_item = self.data_ls[idx]
-                    sequence_list = self._load_sequence_data(data_item) 
+            data_item = self.data_ls[idx]
+            sequence_list = self._load_sequence_data(data_item) 
+            
+            for seq_data in sequence_list:
+                for side in ['l', 'r']:
+                    if seq_data.get(f'{side}_valid', True):  # Check if this side has valid data
+                        processed_seq = self.process_sequence(seq_data, side)
+                        if processed_seq is not None: whole_data_ls.append(processed_seq)
                     
-                    for seq_data in sequence_list:
-                        for side in ['l', 'r']:
-                            if seq_data.get(f'{side}_valid', True):  # Check if this side has valid data
-
-                                processed_seq = self.process_sequence(seq_data, side)
-                                if processed_seq is not None: whole_data_ls.append(processed_seq)
-                        
-                except Exception as e:
-                    logging.error(f"Error processing {data_item}: {e}")
-                    bad_seq_num += 1
         
         logging.info(f"Processed {len(whole_data_ls)} sequences, {bad_seq_num} failed")
         return whole_data_ls
