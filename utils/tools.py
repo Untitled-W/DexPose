@@ -12,7 +12,13 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from torch_cluster import fps
 from sklearn.cluster import DBSCAN
-from pytorch3d.transforms import matrix_to_axis_angle, axis_angle_to_matrix
+from pytorch3d.transforms import (
+    quaternion_to_matrix, 
+    matrix_to_quaternion, 
+    axis_angle_to_quaternion, 
+    quaternion_to_axis_angle
+)
+from manopth.manolayer import ManoLayer
 
 from dataset.base_structure import HumanSequenceData, DexSequenceData
 
@@ -142,6 +148,21 @@ def apply_transformation_human_data(points: List[torch.tensor], transformation: 
     for t in range(transformation.shape[1]):
         pc_ls.append(np.concatenate([pc[t] for pc in obj_pc], axis=0))
     return pc_ls
+
+
+def extract_hand_points_and_mesh(hand_tsls, hand_coeffs, side):
+    if side == 0:
+        mano_layer = ManoLayer(center_idx=0, side='left', use_pca=False).cuda()
+    else:
+        mano_layer = ManoLayer(center_idx=0, side='right', use_pca=False).cuda()
+
+
+    hand_verts, hand_joints = mano_layer(quaternion_to_axis_angle(hand_coeffs.to('cuda')).reshape(-1, 48)) # manopth use axis_angle and should be (B, 48)
+    hand_joints = hand_joints.cpu().numpy() * 0.001 # if using manotorch, you don't need that!
+    hand_verts = hand_verts.cpu().numpy() * 0.001
+    hand_joints += hand_tsls.cpu().numpy()[...,None,:]
+
+    return hand_joints, hand_verts
 
 
 def compute_hand_geometry(hand_pose_frame, mano_layer):

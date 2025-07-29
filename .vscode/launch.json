@@ -4,15 +4,20 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
         {
-            "name": "render_hand_object",
+            "name": "render_hand",
             "type": "debugpy",
             "request": "launch",
-            "module": "retarget.render_hand_object",
-            "env": {
-                "CONDA_DEFAULT_ENV": "anytelop"
-            },
+            "module": "retarget_test.render_hand_object",
+            "python":"${command:python.interpreterPath}"
+        },
+
+
+        {
+            "name": "anyteleop",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "retarget.anyteleop",
             "python":"${command:python.interpreterPath}"
         },
         
