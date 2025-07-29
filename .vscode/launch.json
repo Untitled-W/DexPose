@@ -6,6 +6,14 @@
     "configurations": [
 
         {
+            "name": "currentfile",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "python":"${command:python.interpreterPath}"
+        },
+
+        {
             "name": "render_hand_object",
             "type": "debugpy",
             "request": "launch",

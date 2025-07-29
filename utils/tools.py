@@ -14,8 +14,6 @@ from torch_cluster import fps
 from sklearn.cluster import DBSCAN
 from pytorch3d.transforms import matrix_to_axis_angle, axis_angle_to_matrix
 
-from dataset.base_structure import HumanSequenceData, DexSequenceData
-
 def apply_transformation_pt(points: torch.Tensor, transformation_matrix: torch.Tensor):
     """Apply transformation matrix to points.
     
@@ -113,7 +111,7 @@ def get_point_clouds_from_dexycb(data: dict):
     return pc_ds[0] # only 1 object in the dataset
 
 
-def get_point_clouds_from_human_data(seq_data: HumanSequenceData, ds_num=1000):
+def get_point_clouds_from_human_data(seq_data, ds_num=1000):
     obj_mesh = []
     for mesh_path in seq_data.object_mesh_path:
         obj_mesh.append(o3d.io.read_triangle_mesh(mesh_path))
