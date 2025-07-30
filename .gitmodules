@@ -7,3 +7,9 @@
 [submodule "thirdparty/manopth"]
 	path = thirdparty/manopth
 	url = https://github.com/hassony2/manopth
+[submodule "thirdparty/manotorch"]
+	path = thirdparty/manotorch
+	url = https://github.com/lixiny/manotorch.git
+[submodule "thirdparty/diffusers"]
+	path = thirdparty/diffusers
+	url = https://github.com/huggingface/diffusers.git

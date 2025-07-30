@@ -21,8 +21,6 @@ from pytransform3d import transformations as pt
 # from manopth.manolayer import ManoLayer
 from manotorch.manolayer import ManoLayer
 
-
-
 from .base_structure import BaseDatasetProcessor, DatasetRegistry, HumanSequenceData, ORIGIN_DATA_PATH, HUMAN_SEQ_PATH
 from utils.tools import apply_transformation_pt
 from utils.vis_utils import visualize_human_sequence
@@ -562,8 +560,8 @@ DATASET_CONFIGS = {
         'save_path': HUMAN_SEQ_PATH['Oakinkv2'],
         'task_interval': 20,
         'which_dataset': 'Oakinkv2',
-        'seq_data_name': 'debug',
-        # 'sequence_indices': list(range(0, 50))  # Example sequence indices for processing
+        'seq_data_name': 'feature',
+        'sequence_indices': list(range(0, 5))  # Example sequence indices for processing
     },
     
     'taco': {
@@ -572,8 +570,8 @@ DATASET_CONFIGS = {
         'save_path': HUMAN_SEQ_PATH['Taco'],
         'task_interval': 1,
         'which_dataset': 'Taco',
-        'seq_data_name': 'debug',
-        # 'sequence_indices': list(range(0, 10))  # Example sequence indices for processing
+        'seq_data_name': 'feature',
+        'sequence_indices': list(range(0, 10))  # Example sequence indices for processing
     },
 
     'dexycb': {
@@ -582,8 +580,8 @@ DATASET_CONFIGS = {
         'save_path': HUMAN_SEQ_PATH['DexYCB'],
         'task_interval': 1,
         'which_dataset': 'DexYCB',
-        'seq_data_name': 'debug',
-        # 'sequence_indices': list(range(0, 10))  # Example sequence indices for
+        'seq_data_name': 'feature',
+        'sequence_indices': list(range(0, 3))  # Example sequence indices for
     }
 }
 
@@ -778,7 +776,8 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
 
 if __name__ == "__main__":
 
-    dataset_names = ['dexycb']#, 'taco', 'oakinkv2']
+    # dataset_names = ['dexycb', 'taco', 'oakinkv2']
+    dataset_names = ['taco']
     processed_data = []
     
     GENERATE = True
@@ -793,4 +792,4 @@ if __name__ == "__main__":
 
     # show_human_statistics(processed_data)
     
-    # check_data_correctness_by_vis(processed_data)
+    check_data_correctness_by_vis(processed_data)
