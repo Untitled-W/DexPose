@@ -43,3 +43,13 @@ retarget/
 1. load humanSequenceData
 2. retarget to 6 type of robot hands (using `utils.veiwer.py`) and save to DexSequenceData.
 
+
+diffusers==0.15.0
+transformers==4.29.2
+xformers==0.0.20
+ipympl==0.9.3
+accelerate==0.28.0
+urllib3==1.25.11
+open_clip_torch==2.24.0
+einops==0.7.0
+openai
