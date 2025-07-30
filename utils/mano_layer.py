@@ -7,8 +7,8 @@
 import torch
 
 from torch.nn import Module
-from manotorch.manolayer import ManoLayer
-# from manopth.manolayer import ManoLayer
+# from manotorch.manolayer import ManoLayer
+from manopth.manolayer import ManoLayer
 
 
 class MANOLayer(Module):
