@@ -53,3 +53,6 @@ urllib3==1.25.11
 open_clip_torch==2.24.0
 einops==0.7.0
 openai
+
+
+pip install torch==1.13.0+cu117 torchvision==0.14.0+cu117 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cu117
