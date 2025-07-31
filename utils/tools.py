@@ -14,7 +14,15 @@ from torch_cluster import fps
 from sklearn.cluster import DBSCAN
 from hdbscan import HDBSCAN
 from pytorch3d.transforms import quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion, quaternion_to_axis_angle
+from pytorch3d.transforms import (
+    quaternion_to_matrix, 
+    matrix_to_quaternion, 
+    axis_angle_to_quaternion, 
+    quaternion_to_axis_angle
+)
+from manotorch.manolayer import ManoLayer
 
+from dataset.base_structure import HumanSequenceData, DexSequenceData
 def rotation_6d_to_matrix(d6: torch.Tensor) -> torch.Tensor:
     """
     Converts 6D rotation representation by Zhou et al. [1] to rotation matrix
