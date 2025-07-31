@@ -5,13 +5,14 @@ from typing import Dict, List, Tuple, Any, Optional, Union
 from dataclasses import dataclass
 import numpy as np
 import torch
-import open3d as o3d
+import copy
 from tqdm import tqdm
 from data_process.mesh_renderer import MeshRenderer3D
 from data_process.vis_utils import visualize_pointclouds_and_mesh, get_multiview_dff, extract_pca, test_pca_matching
 from manotorch.manolayer import ManoLayer
 from utils.vis_utils import vis_pc_coor_plotly
-from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate_feature, get_contact_pts, find_longest_false_substring
+from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate_feature, get_contact_pts, find_longest_false_substring, from_hand_rot6d, to_hand_rot6d
+from pytorch3d.transforms import matrix_to_axis_angle, axis_angle_to_matrix, quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
 
 # ORIGIN_DATA_PATH = {
 #     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco",
@@ -171,6 +172,102 @@ class BaseDatasetProcessor(ABC):
         
         return float(elevation_deg), float(azimuth_deg)
 
+    @staticmethod
+    def mirror_data(data_dict, side):
+        ### TODO
+        if type(data_dict[f'{side}o_transf']) is list:
+            obj_transf_list_m = []
+            for obj_transf in data_dict[f'{side}o_transf']:
+                transl_m = obj_transf[:, :3, 3].clone()
+                rot_m = obj_transf[:, :3, :3].clone()
+
+                transl_m[..., 0] *= -1
+                rot_m = matrix_to_axis_angle(rot_m)
+                rot_m[..., [1, 2]] *= -1
+                rot_m = axis_angle_to_matrix(rot_m)
+
+                obj_transf_m = torch.eye(4).to(obj_transf.device).repeat(obj_transf.shape[0], 1, 1)
+                obj_transf_m[:, :3, :3] = rot_m
+                obj_transf_m[:, :3, 3] = transl_m
+                obj_transf_list_m.append(obj_transf_m)
+            
+            obj_points_list_m = []
+            for obj_points in data_dict[f'{side}o_points']:
+                obj_points_m = obj_points.clone()
+                obj_points_m[..., 0] *= -1
+                obj_points_list_m.append(obj_points_m)
+            
+            obj_points_ori_list_m = []
+            for obj_points_ori in data_dict[f'{side}o_points_ori']:
+                obj_points_ori_m = obj_points_ori.clone()
+                obj_points_ori_m[..., 0] *= -1
+                obj_points_ori_list_m.append(obj_points_ori_m)
+            
+            obj_normals_list_m = []
+            for obj_normals in data_dict[f'{side}o_normals']:
+                obj_normals_m = obj_normals.clone()
+                obj_normals_m[..., 0] *= -1
+                obj_normals_list_m.append(obj_normals_m)
+            
+            obj_normals_ori_list_m = []
+            for obj_normals_ori in data_dict[f'{side}o_normals_ori']:
+                obj_normals_ori_m = obj_normals_ori.clone()
+                obj_normals_ori_m[..., 0] *= -1
+                obj_normals_ori_list_m.append(obj_normals_ori_m)
+            
+            obj_features_list_m = [obj_features.clone() for obj_features in data_dict[f'{side}o_features']]
+        else:
+            obj_transf = data_dict[f'{side}o_transf']
+            transl_m = obj_transf[:, :3, 3].clone()
+            rot_m = obj_transf[:, :3, :3].clone()
+
+            transl_m[..., 0] *= -1
+            rot_m = matrix_to_axis_angle(rot_m)
+            rot_m[..., [1, 2]] *= -1
+            rot_m = axis_angle_to_matrix(rot_m)
+
+            obj_transf_m = torch.eye(4).to(obj_transf.device).repeat(obj_transf.shape[0], 1, 1)
+            obj_transf_m[:, :3, :3] = rot_m
+            obj_transf_m[:, :3, 3] = transl_m
+            obj_transf_list_m = obj_transf_m
+
+            obj_points_m = data_dict[f'{side}o_points'].clone()
+            obj_points_m[..., 0] *= -1
+            obj_points_list_m = obj_points_m
+
+            obj_normals_m = data_dict[f'{side}o_normals'].clone()
+            obj_normals_m[..., 0] *= -1
+            obj_normals_list_m = obj_normals_m
+
+        ### hand
+        hand_joints_m = data_dict[f'{side}h_joints'].clone()
+        hand_joints_m[..., 0] *= -1
+        hand_params:torch.Tensor = data_dict[f'{side}h_params'].clone()
+        hand_params[..., -3] *= -1
+        hand_rotvec = from_hand_rot6d(hand_params[:, :-3].reshape(hand_params.shape[0], -1, 6), to_rotvec=True)
+        hand_rotvec = hand_rotvec.reshape(hand_params.shape[0], -1, 3)
+        hand_rotvec[..., [1, 2]] *= -1
+        hand_rot6d_m = to_hand_rot6d(hand_rotvec, from_rotvec=True)
+        hand_params_m = torch.cat((hand_rot6d_m.flatten(-2), hand_params[..., -3:]), dim=-1)
+
+        side_m = 'l' if side == 'r' else 'r'
+
+        data_dict_m = {
+            f'{side_m}h_joints': hand_joints_m,
+            f'{side_m}o_transf': obj_transf_list_m,
+            f'{side_m}o_points': obj_points_list_m,
+            f'{side_m}o_normals': obj_normals_list_m,
+            f'{side_m}h_params': hand_params_m,
+            f'{side}h_joints': None,
+            f'{side}o_transf': None,
+            f'{side}o_points': None,
+            f'{side}o_normals': None,
+            f'{side}h_params': None,
+            'contact_indices': copy.deepcopy(data_dict['contact_indices']),
+            'mesh_path': copy.deepcopy(data_dict['mesh_path']),
+        }
+        return data_dict_m
+
     @abstractmethod
     def _setup_paths(self):
         """Setup dataset-specific paths."""
@@ -264,7 +361,7 @@ class BaseDatasetProcessor(ABC):
             self.renderer.augment_textures(texture_prompts, num_variations=1, save_dir="test_res")
             self.renderer.extract_features(prompt="a shovel", w_aug_texture=True)
             rgbs, depths, masks, points_ls, features = self.renderer.get_rendered_data()
-            # features (num_views, num_texture, feature_dim, height, width)
+            # features: (num_views, num_texture, feature_dim, height, width)
             all_points_dff, all_features_dff = get_multiview_dff(points_ls, masks, features,
                                                     n_points=1000)
             
@@ -272,8 +369,7 @@ class BaseDatasetProcessor(ABC):
             obj_points_trans_ori = apply_transformation_pt(all_points_dff, obj_transf_ls[obj_part_idx])
             hand_key_joints = get_key_hand_joints(hand_joints)
             hand_key_features = intepolate_feature(hand_key_joints, all_features_dff[0], obj_points_trans_ori)
-            contact_indices = get_contact_pts(all_points_dff, all_features_dff[0],
-                                                hand_key_features, n_pts=100 // len(object_mesh_path_ls))
+            contact_indices = get_contact_pts(all_points_dff, all_features_dff[0], hand_key_features, n_pts=100 // len(object_mesh_path_ls))
             ### get contact point indices
             
             ### get the contact timesteps
@@ -301,12 +397,18 @@ class BaseDatasetProcessor(ABC):
         #                    gt_hand_joints=hand_inv_joints[0].cpu().numpy(),
         #                    transformation_ls=c2w, show_axis=True)       
         # #### DEBUG CODE
-
+        
+        ### Return KEYS
+        ### TODO self.mirror_data
+        ### TODO DICT return 
+        ### TODO Sanity Check
+        # DICT with keys: ['rh_joints', 'ro_transf', 'ro_points', 'ro_normals', 'rh_params', 
+        #  'lh_joints', 'lo_transf', 'lo_points', 'lo_normals', 'lh_params', 
+        #  'contact_indices', 'mesh_path', 'side', 'task_desc', 'seq_len']
         sequence_data = HumanSequenceData(
             hand_tsls=hand_tsl.cpu(),
             hand_coeffs=hand_coeffs.cpu(),
             side=1 if side == 'r' else 0,
-            
             obj_poses=torch.stack(obj_transf_ls).cpu(),
             object_names=object_name_ls,
             object_mesh_path=object_mesh_path_ls,
