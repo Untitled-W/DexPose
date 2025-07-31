@@ -3,12 +3,16 @@ import torch
 import os
 from typing import List, Dict, Optional, Tuple, Union
 import warnings
+from tqdm import tqdm
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from pytorch3d.ops import sample_farthest_points, ball_query
 from pytorch3d.structures import Meshes
 from pytorch3d.transforms import (
-    quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion, quaternion_to_axis_angle
+    quaternion_to_matrix, 
+    matrix_to_quaternion, 
+    axis_angle_to_quaternion, 
+    quaternion_to_axis_angle
 )
 from pytransform3d import transformations as pt
 from plotly.colors import get_colorscale
@@ -20,10 +24,9 @@ from manotorch.manolayer import ManoLayer
 
 from .tools import (cosine_similarity, 
                     farthest_point_sampling, 
-                    compute_hand_geometry, 
+                    extract_hand_points_and_mesh,
                     get_point_clouds_from_human_data,
                     apply_transformation_human_data)
-from .mano_layer import MANOLayer
 from .hand_model import load_robot
 
 def arange_pixels(
@@ -83,70 +86,6 @@ def plot_points(pts: np.ndarray, colors: np.ndarray) -> go.Scatter3d:
         )
     )
 
-
-def get_multiview_dff(
-    points_ls: List[torch.Tensor],
-    masks: torch.Tensor,
-    features: torch.Tensor, # (B, C, H, W)
-    tolerance=0.01,
-    n_points=1000,
-    ds_points: Optional[torch.Tensor] = None
-):  
-    H, W = masks.shape[1:3]
-    if ds_points is None:
-        all_points = torch.cat(points_ls, dim=0) 
-        ds_points, _ = sample_farthest_points(all_points.unsqueeze(0), K=n_points) ###0701
-        ds_points = ds_points.squeeze(0).to(features.device)  # (N, 3)
-
-    maximal_distance = torch.cdist(ds_points, ds_points).max()
-    ball_drop_radius = maximal_distance * tolerance
-    pixel_coords = arange_pixels((H, W), invert_y_axis=True)[0]
-    pixel_coords[:, 0] = torch.flip(pixel_coords[:, 0], dims=[0])
-    # grid = arange_pixels((H, W), invert_y_axis=False)[0].to(device).reshape(1, H, W, 2).half()
-
-    ft_per_vertex = torch.zeros((len(ds_points), features.shape[-3])).to(features.device)
-    ft_per_vertex_count = torch.zeros((len(ds_points), 1)).half().to(features.device)
-    points_ls = [points.to(features.device) for points in points_ls]
-
-    features_ls = []
-    for idx in range(len(points_ls)):
-        aligned_features = features[idx].flatten(1)
-        indices = masks[idx].flatten(0)
-        features_per_pixel = aligned_features[:, indices]
-
-        queried_indices = ball_query(
-                points_ls[idx].unsqueeze(0),
-                ds_points.unsqueeze(0),
-                K=100,
-                radius=ball_drop_radius,
-                return_nn=False,
-            ).idx[0].to(features_per_pixel.device) # (num_feature, num)
-
-        mask_close = queried_indices != -1
-        repeat = mask_close.sum(dim=1) # (num_feature,)
-        ft_per_vertex_count[queried_indices[mask_close]] += 1
-        ft_per_vertex[queried_indices[mask_close]] += features_per_pixel.repeat_interleave(repeat, dim=1).T
-
-        features_ls.append(features_per_pixel.T)
-    
-    idxs = (ft_per_vertex_count != 0)[:, 0]
-    ft_per_vertex[idxs, :] = ft_per_vertex[idxs, :] / ft_per_vertex_count[idxs, :]
-    missing_features = len(ft_per_vertex_count[ft_per_vertex_count == 0])
-    # print("Number of missing features: ", missing_features)
-    # print("Copied features from nearest vertices")
-
-    if missing_features > 0:
-        filled_indices = ft_per_vertex_count[:, 0] != 0
-        missing_indices = ft_per_vertex_count[:, 0] == 0
-        distances = torch.cdist(
-            ds_points[missing_indices], ds_points[filled_indices], p=2
-        )
-        closest_vertex_indices = torch.argmin(distances, dim=1).cpu()
-        ft_per_vertex[missing_indices, :] = ft_per_vertex[filled_indices][
-            closest_vertex_indices, :
-        ]
-
-    return ds_points, ft_per_vertex
 
 
 def visualize_pointclouds_and_mesh(
@@ -386,23 +325,6 @@ def _extract_mesh_data(mesh: Union[Meshes, Dict]) -> Tuple[np.ndarray, np.ndarra
     
     else:
         raise ValueError("Unsupported mesh format. Use PyTorch3D Meshes or dict with 'vertices' and 'faces' keys")
-
-
-def _extract_hand_points_and_mesh(hand_tsls, hand_coeffs, side):
-    if side == 0:
-        mano_layer = ManoLayer(center_idx=0, side='left', use_pca=False).cuda()
-    else:
-        mano_layer = ManoLayer(center_idx=0, side='right', use_pca=False).cuda()
-
-    # import pickle
-    # with open("a_pps.pkl", "wb") as f:
-    #     pickle.dump(hand_coeffs, f)
-
-    hand_verts, hand_joints = mano_layer(quaternion_to_axis_angle(hand_coeffs.to('cuda')).reshape(-1, 48)) # manopth use axis_angle and should be (B, 48)
-    hand_joints = hand_joints.cpu().numpy() * 0.001 # if using manotorch, you don't need that!
-    hand_joints += hand_tsls.cpu().numpy()[:,None,:]
-
-    return hand_joints, None
 
 
 
@@ -906,87 +828,13 @@ def vis_frames_plotly(pc_ls:List[np.ndarray]=None, hand_pts_ls:List[np.ndarray]=
 
 def visualize_human_sequence(seq_data, filename: Optional[str] = None):
     
-    # Example: extract hand and object data for visualization
-    obj_mesh = []
-    for mesh_path in seq_data.object_mesh_path:
-        if os.path.exists(mesh_path):
-            obj_mesh.append(o3d.io.read_triangle_mesh(mesh_path))
-        else:
-            obj_mesh.append(None)
-    original_pc = [np.asarray(mesh.vertices) for mesh in obj_mesh if mesh is not None]
+    ##  Visualize Object Point Clouds ##
+    pc = get_point_clouds_from_human_data(seq_data)
+    pc_ls = apply_transformation_human_data(pc, seq_data.obj_poses)
+    pc_ls = [np.asarray(pc_ls)] # due to some dim issue
 
-    original_pc_ls = [
-            farthest_point_sampling(torch.from_numpy(points).unsqueeze(0), 1000)[:1000]  for points in original_pc
-        ]
-    pc_ds = [pc[pc_idx] for pc, pc_idx in zip(original_pc, original_pc_ls)]
-
-    if seq_data.which_dataset == 'TACO':
-        for i in range(len(pc_ds)):
-            pc_ds[i] *= 0.01
-
-    obj_pc = [] # should be (T, N, 3) of len k
-    for pc, obj_trans in zip(pc_ds, seq_data.obj_poses):
-        t_frame_pc = []
-        for t_trans in obj_trans:
-            t_frame_pc.append(pt_transform(pc, t_trans.cpu().numpy()))
-        obj_pc.append(np.array(t_frame_pc))
-    pc_ls = []
-    for t in range(len(seq_data.hand_tsls)):
-        pc_ls.append(np.concatenate([pc[t] for pc in obj_pc], axis=0))
-    pc_ls = [np.asarray(pc_ls)] 
-
-    mano_hand_joints, hand_verts = _extract_hand_points_and_mesh(seq_data.hand_tsls, seq_data.hand_coeffs, seq_data.side)
-
-    ######
-
-    if seq_data.which_dataset == 'DexYCB' and False:
-
-        hand_type = 'left' if seq_data.side == 0 else 'right'
-
-        extrinsic_mat = seq_data.extra_info["extrinsics"] 
-        pose_vec = pt.pq_from_transform(extrinsic_mat)
-        camera_pose = torch.eye(4)
-        camera_pose[:3, :3] = quaternion_to_matrix(torch.from_numpy(pose_vec[3:7]))
-        camera_pose[:3, 3] = torch.from_numpy(pose_vec[0:3])
-        camera_pose = camera_pose.numpy()
-        camera_pose = np.linalg.inv(camera_pose)
-
-        hand_pose_frame = torch.cat([quaternion_to_axis_angle(seq_data.hand_coeffs).reshape(-1, 48), seq_data.hand_tsls], dim=-1).unsqueeze(1).numpy()
-
-        hand_joints = []
-        mano_layer = ManoLayer(center_idx=0, side=hand_type, use_pca=False)
-        xx = ManoLayer(
-            flat_hand_mean=False,
-            ncomps=45,
-            side=hand_type,
-            use_pca=True,
-        )
-            
-        for i in range(hand_pose_frame.shape[0]):
-
-            if np.abs(hand_pose_frame[i]).sum() < 1e-5:
-                joint = joint = np.zeros((21, 3), dtype=np.float32)
-            else:
-                p = torch.from_numpy(hand_pose_frame[i][:, :48].astype(np.float32))
-                p[:,3:] = p[:,3:].mm(xx.th_selected_comps) + xx.th_hands_mean
-                t = torch.from_numpy(hand_pose_frame[i][:, 48:51].astype(np.float32))
-                # vertex, joint = mano_layer(p, th_trans=t)
-                # joint = joint.cpu().numpy()[0] * 0.001
-                # joint += t.cpu().numpy()
-                # p: shape(1, 48), t: shape(1, 3)
-                vertex, joint = mano_layer(p)
-                joint = joint.cpu().numpy()[0] * 0.001 # (21, 3)
-                t_offset = xx(p)[1].cpu().numpy()[0] * 0.001 # (21, 3)
-                joint += t.cpu().numpy() + t_offset[0]
-                print(t_offset[0])
-
-            joint = joint @ camera_pose[:3, :3].T + camera_pose[:3, 3]
-            joint = np.ascontiguousarray(joint)
-            hand_joints.append(joint)
-
-        mano_hand_joints = torch.tensor(hand_joints, dtype=torch.float32)
-
-    ######
+    ## Extract Hand Points and Mesh ##
+    mano_hand_joints, hand_verts = extract_hand_points_and_mesh(seq_data.hand_tsls, seq_data.hand_coeffs, seq_data.side)
 
     # Visualize using vis_frames_plotly
     vis_frames_plotly(
@@ -1012,41 +860,30 @@ def visualize_dex_hand_sequence(seq_data, filename: Optional[str] = None):
 
     robot = load_robot(robot_name_str, hand_type)
 
-    ### hand meshes ###
+    ### robot hand meshes ###
     hand_meshes = []
-    for i in range(seq_data.hand_poses.shape[0]):
-        robot.set_qpos(torch.from_numpy(seq_data.hand_poses[i].astype(np.float32)))
+    for i in tqdm(range(seq_data.hand_poses.shape[0])):
+        robot.set_qpos(seq_data.hand_poses[i])
         hand_mesh = robot.get_hand_mesh()
-        # print(len(hand_mesh.vertices), len(hand_mesh.triangles))
         hand_meshes.append(hand_mesh)
 
 
     ### hand joints ###
-    hand_joints = []
-    
-    hand_pose = torch.cat([quaternion_to_axis_angle(seq_data.hand_coeffs).reshape(-1, 48), seq_data.hand_tsls], dim=-1)
-    hand_pose = hand_pose.unsqueeze(1).numpy()  # Convert to numpy array
-
-    mano_layer = MANOLayer(hand_type, np.zeros(10).astype(np.float32))
-    for i in range(hand_pose.shape[0]):
-        joint = compute_hand_geometry(hand_pose[i], mano_layer= mano_layer)
-        hand_joints.append(joint)
-    hand_joints = torch.tensor(hand_joints, dtype=torch.float32)
-
+    mano_hand_joints, hand_verts = extract_hand_points_and_mesh(seq_data.hand_tsls, seq_data.hand_coeffs, seq_data.side)
 
 
     ### point clouds ###
     pc = get_point_clouds_from_human_data(seq_data)
     pc_ls = apply_transformation_human_data(pc, seq_data.obj_poses)
-    pc_ls = [pc_ls] # due to some dim issue
+    pc_ls = [np.asarray(pc_ls)] # due to some dim issue
 
 
     vis_frames_plotly(
         pc_ls=pc_ls,
-        gt_hand_joints=hand_joints,
+        gt_hand_joints=mano_hand_joints,
         hand_mesh=hand_meshes,
         show_axis=True,
-        filename=f"/home/qianxu/Desktop/Project/DexPose/retarget/vis_results/{robot_name_str}_seq_{data_id}_qpos"
+        filename=filename
     )    
 
     

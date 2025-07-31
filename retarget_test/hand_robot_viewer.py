@@ -246,6 +246,8 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 start_frame = i
                 break
 
+        print("Start frame:", start_frame)
+
         # Warm start
         hand_pose_start = hand_pose[start_frame]
         wrist_quat = rotations.quaternion_from_compact_axis_angle(
@@ -268,6 +270,7 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             object_pose_frame = object_pose[i]
             hand_pose_frame = hand_pose[i]
             vertex, joint = self._compute_hand_geometry(hand_pose_frame)
+            print("Frame:", i, "Joints:", joint)
 
             # Update poses for YCB objects
             for k in range(num_ycb_objects):
@@ -292,9 +295,12 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             ):
                 indices = retargeting.optimizer.target_link_human_indices
                 ref_value = joint[indices, :]
+                print("Frame:", i, "Ref value:", ref_value)
                 qpos_retarget = retargeting.retarget(ref_value)
                 qpos_sapien = qpos_retarget[retarget2sapien]
                 qpos_pk = qpos_retarget[retarget2pk]
+                print("Frame:", i, "Qpos Sapien:", qpos_sapien)
+                print("Frame:", i, "Qpos PK:", qpos_pk)
                 robot.set_qpos(qpos_sapien)
                 qpos_dict[robot_name].append(qpos_pk.copy())
 
@@ -304,6 +310,10 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
         for robot_name, qpos_list in qpos_dict.items():
             qpos_arr = np.stack(qpos_list, axis=0)
             np.save(save_dir / f"{str(robot_name).split('.')[-1]}_seq_{data_id}_qpos.npy", qpos_arr)
+
+            print("QPOS:")
+            for i, q in enumerate(qpos_arr):
+                print(f"Frame {i}: {q}")
 
 
     def load_object_hand_2(self, data: Dict):

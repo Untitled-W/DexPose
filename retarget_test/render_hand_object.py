@@ -6,7 +6,6 @@ import numpy as np
 import tyro
 import os
 import torch
-from torch_cluster import fps
 import pytorch_kinematics as pk
 import open3d as o3d
 from pytorch3d.transforms import (
@@ -53,9 +52,9 @@ def viz_hand_object(data_id, robots: Optional[Tuple[RobotName]], data_root: Path
         )
 
     sampled_data = dataset[data_id]
-    for key, value in sampled_data.items():
-        if "pose" not in key:
-            print(f"{key}: {value}")
+    # for key, value in sampled_data.items():
+    #     if "pose" not in key:
+    #         print(f"{key}: {value}")
     viewer.load_object_hand(sampled_data)
     viewer.retarget_and_save(sampled_data, data_id)
     # viewer.render_dexycb_data(sampled_data, data_id, fps)
@@ -94,11 +93,11 @@ def test(data_id: int = 4, robots: Optional[List[RobotName]] = [RobotName.allegr
     dataset = DexYCBVideoDataset(data_root, hand_type=hand_type, mode="sub")
 
     sampled_data = dataset[data_id]
+    print(data_id, sampled_data["capture_name"])
 
- 
     robot = load_robot(robot_name_str, hand_type)
 
-    qpos_file = f'/home/qianxu/Desktop/Project/DexPose/retarget/hand_qpos/{robot_name_str}_seq_{data_id}_qpos.npy'
+    qpos_file = f'/home/qianxu/Desktop/Project/DexPose/retarget_test/hand_qpos/{robot_name_str}_seq_{data_id}_qpos.npy'
     qpos = np.load(qpos_file)
 
     ### hand meshes ###
@@ -122,10 +121,6 @@ def test(data_id: int = 4, robots: Optional[List[RobotName]] = [RobotName.allegr
     ### hand joints ###
     hand_joints = []
     hand_pose_frame = sampled_data["hand_pose"]
-
-    import pickle
-    with open("a_rtg.pkl", "wb") as f:
-        pickle.dump(hand_pose_frame, f)
 
     mano_layer = MANOLayer(hand_type, np.zeros(10).astype(np.float32))
     for i in range(hand_pose_frame.shape[0]):
@@ -160,7 +155,7 @@ def test(data_id: int = 4, robots: Optional[List[RobotName]] = [RobotName.allegr
         gt_hand_joints=hand_joints,
         hand_mesh=hand_meshes,
         show_axis=True,
-        filename=f"/home/qianxu/Desktop/Project/DexPose/retarget/vis_results/{robot_name_str}_seq_{data_id}_qpos"
+        filename=f"/home/qianxu/Desktop/Project/DexPose/retarget_test/vis_results/{robot_name_str}_seq_{data_id}_qpos"
     )    
 
 
@@ -180,23 +175,31 @@ def run(data_id : int = 4, mode : str = "test", robots: Optional[List[RobotName]
 def test_multiple():
     # Example usage of the test function with multiple data IDs
     data_ids = [1]
-    robots = [RobotName.inspire, ]
+    robots = [
+            #   RobotName.inspire, 
             #   RobotName.svh, 
             #   RobotName.leap, 
-            #   RobotName.allegro, 
+              RobotName.allegro, 
             #   RobotName.shadow, 
-            #   RobotName.panda]  # List of robots to test
+            #   RobotName.panda
+            ]  # List of robots to test
 
     for data_id in data_ids:
         for robot in robots:
             print(f"Testing with data_id: {data_id}, robot: {robot}")
-            main(data_id=data_id, dexycb_dir='/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data', robots=[robot], fps=10)
+            main(data_id=data_id, dexycb_dir=dexycb_dir, robots=[robot], fps=10)
             import time; time.sleep(1)
-            test(data_id=data_id, robots=[robot], dexycb_dir='/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data', hand_type="right", fps=10)
+            test(data_id=data_id, robots=[robot], dexycb_dir=dexycb_dir, hand_type="right", fps=10)
 
 
 if __name__ == "__main__":
+    dexycb_dir = '/home/qianxu/Desktop/Project/interaction_pose/data/DexYCB/dex-ycb-20210415'
     # tyro.cli(main)
     # tyro.cli(test)
     # tyro.cli(run, description="Run the hand-object visualization for DexYCB dataset.")
     test_multiple()
+
+    # dataset = DexYCBVideoDataset(dexycb_dir, hand_type="right", mode='full')
+    # for data_id in range(len(dataset)):
+    #     sampled_data = dataset[data_id]
+    #     print(data_id, sampled_data["capture_name"])
