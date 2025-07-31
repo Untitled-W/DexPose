@@ -7,8 +7,8 @@
 import torch
 
 from torch.nn import Module
-from manotorch.manolayer import ManoLayer
-# from manopth.manolayer import ManoLayer
+# from manotorch.manolayer import ManoLayer
+from manopth.manolayer import ManoLayer
 
 
 class MANOLayer(Module):
@@ -54,7 +54,7 @@ class MANOLayer(Module):
           v: A tensor of shape [B, 778, 3] containing the vertices.
           j: A tensor of shape [B, 21, 3] containing the joints.
         """
-        print(self.b.expand(p.size(0), -1).shape)
+        # print(self.b.expand(p.size(0), -1).shape)
         v, j = self._mano_layer(p, self.b.expand(p.size(0), -1), t)
         v /= 1000
         j /= 1000

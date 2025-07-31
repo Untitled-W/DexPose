@@ -159,7 +159,8 @@ class HandDatasetSAPIENViewer:
     def load_object_hand(self, data: Dict):
         ycb_ids = data["ycb_ids"]
         ycb_mesh_files = data["object_mesh_file"]
-        hand_shape = data["hand_shape"]
+        # hand_shape = data["hand_shape"]
+        hand_shape = np.zeros(10)  # Default shape if not provided
         extrinsic_mat = data["extrinsics"]
         for ycb_id, ycb_mesh_file in zip(ycb_ids, ycb_mesh_files):
             self._load_ycb_object(ycb_id, ycb_mesh_file)
@@ -169,15 +170,15 @@ class HandDatasetSAPIENViewer:
         pose_vec = pt.pq_from_transform(extrinsic_mat)
         self.camera_pose = sapien.Pose(pose_vec[0:3], pose_vec[3:7]).inv()
 
-    def load_object_hand_2(self, data: Dict):
-        data_ids = data.object_names
-        mesh_files = data.object_mesh_path
-        for data_id, mesh_file in zip(data_ids, mesh_files):
-            self._load_object(data_id, mesh_file)
+    # def load_object_hand_2(self, data: Dict):
+    #     data_ids = data.object_names
+    #     mesh_files = data.object_mesh_path
+    #     for data_id, mesh_file in zip(data_ids, mesh_files):
+    #         self._load_object(data_id, mesh_file)
 
-        self.mano_layer = MANOLayer("right", np.zeros(10).astype(np.float32))
-        self.mano_face = self.mano_layer.f.cpu().numpy()
-        self.camera_pose = sapien.Pose(np.zeros(3), np.zeros(4)).inv()
+    #     self.mano_layer = MANOLayer("right", np.zeros(10).astype(np.float32))
+    #     self.mano_face = self.mano_layer.f.cpu().numpy()
+    #     self.camera_pose = sapien.Pose(np.zeros(3), np.zeros(4)).inv()
 
     def _load_object(self, name, ycb_mesh_file):
         builder = self.scene.create_actor_builder()

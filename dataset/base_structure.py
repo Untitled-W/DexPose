@@ -14,41 +14,48 @@ from utils.vis_utils import vis_pc_coor_plotly
 from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate_feature, get_contact_pts, find_longest_false_substring, from_hand_rot6d, to_hand_rot6d
 from pytorch3d.transforms import matrix_to_axis_angle, axis_angle_to_matrix, quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
 
-# ORIGIN_DATA_PATH = {
-#     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco",
-#     "Oakinkv2": '/home/qianxu/Desktop/New_Folder/OakInk2/OakInk-v2-hub',
-#     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
-# }
 
-# HUMAN_SEQ_PATH = {
-#     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/human_save",
-#     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/human_save",
-#     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data/human_save'
-# }
+WMQ_IS_USING = True
 
-# DEX_SEQ_PATH = {
-#     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/dex_save",
-#     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/dex_save",
-#     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
-# }
+if WMQ_IS_USING:
 
-ORIGIN_DATA_PATH = {
-    "Taco": "/home/qianxu/Project24/TACO_Instructions/data",
-    "Oakinkv2": '/home/qianxu/Desktop/New_Folder/OakInk2/OakInk-v2-hub',
-    'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
-}
+    ORIGIN_DATA_PATH = {
+        "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco",
+        "Oakinkv2": '/home/qianxu/Desktop/New_Folder/OakInk2/OakInk-v2-hub',
+        'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
+    }
 
-HUMAN_SEQ_PATH = {
-    "Taco": "/home/qianxu/Project25/DexPose/Taco/human_save",
-    "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/human_save",
-    'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data/human_save'
-}
+    HUMAN_SEQ_PATH = {
+        "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/human_save",
+        "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/human_save",
+        'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data/human_save'
+    }
 
-DEX_SEQ_PATH = {
-    "Taco": "/home/qianxu/Project25/DexPose/Taco/dex_save",
-    "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/dex_save",
-    'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
-}
+    DEX_SEQ_PATH = {
+        "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/dex_save",
+        "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/dex_save",
+        'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
+    }
+
+else:
+
+    ORIGIN_DATA_PATH = {
+        "Taco": "/home/qianxu/Project24/TACO_Instructions/data",
+        "Oakinkv2": '/home/qianxu/Desktop/New_Folder/OakInk2/OakInk-v2-hub',
+        'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/data/DexYCB/dex-ycb-20210415'
+    }
+
+    HUMAN_SEQ_PATH = {
+        "Taco": "/home/qianxu/Project25/DexPose/Taco/human_save",
+        "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/human_save",
+        'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/data/DexYCB/dex-ycb-20210415/human_save'
+    }
+
+    DEX_SEQ_PATH = {
+        "Taco": "/home/qianxu/Project25/DexPose/Taco/dex_save",
+        "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/dex_save",
+        'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/data/DexYCB/dex-ycb-20210415/dex_save'
+    }
 
 # HumanSequenceData
 @dataclass
@@ -63,6 +70,8 @@ class HumanSequenceData:
     obj_poses: torch.Tensor  # K X T X 4 X 4
     object_names: List[str]  # Names of objects in the sequence
     object_mesh_path: List[str]
+    object_points_ls: List[torch.Tensor]  # K X N X 3
+    object_features_ls: List[torch.Tensor]  # K X N X d
     
     # Metadata
     frame_indices: List[int]  # Frame indices in the original sequence
