@@ -132,7 +132,8 @@ class TextureAugmentator:
                        num_inference_steps: int = 20,
                        guidance_scale: float = 7.5,
                        controlnet_conditioning_scale: float = 1.0,
-                       strength: float = 0.8) -> np.ndarray:
+                    #    strength: float = 0.8
+                       ) -> np.ndarray:
         """
         Augment texture using ControlNet + Stable Diffusion
         
@@ -151,47 +152,41 @@ class TextureAugmentator:
             Augmented RGB image as numpy array
         """
         if self.pipeline is None:
-            print("Warning: Pipeline not available, returning original image")
-            return rgb_image
+            raise RuntimeError("ControlNet pipeline not initialized. Check if diffusers is installed and models are loaded.")
         
-        try:
-            # Convert inputs to PIL Images
-            rgb_pil = Image.fromarray((rgb_image * 255).astype(np.uint8))
-            control_image = self.prepare_control_image(depth_image, mask)
-            
-            # Resize to model input size (512x512 for most SD models)
-            target_size = (512, 512)
-            rgb_pil = rgb_pil.resize(target_size, Image.Resampling.LANCZOS)
-            control_image = control_image.resize(target_size, Image.Resampling.LANCZOS)
-            
-            # Generate augmented image using ControlNet (text2img with depth conditioning)
-            with torch.autocast(self.device.type):
-                result = self.pipeline(
-                    prompt=prompt,
-                    image=control_image,  # Control image parameter for ControlNet
-                    negative_prompt=negative_prompt,
-                    num_inference_steps=num_inference_steps,
-                    guidance_scale=guidance_scale,
-                    controlnet_conditioning_scale=controlnet_conditioning_scale,
-                    generator=torch.Generator(device=self.device).manual_seed(42)
-                ).images[0]
-            
-            # Resize back to original size
-            original_size = (rgb_image.shape[1], rgb_image.shape[0])  # (W, H)
-            result = result.resize(original_size, Image.Resampling.LANCZOS)
-            
-            # Convert back to numpy array
-            result_np = np.array(result) / 255.0
-            
-            # Blend with original image using mask
-            mask_3d = np.stack([mask] * 3, axis=-1).astype(np.float32)
-            blended = rgb_image * (1 - mask_3d) + result_np * mask_3d
-            
-            return blended
-            
-        except Exception as e:
-            print(f"Error during texture augmentation: {e}")
-            return rgb_image
+        # Convert inputs to PIL Images
+        rgb_pil = Image.fromarray((rgb_image * 255).astype(np.uint8))
+        control_image = self.prepare_control_image(depth_image, mask)
+        
+        # Resize to model input size (512x512 for most SD models)
+        target_size = (512, 512)
+        rgb_pil = rgb_pil.resize(target_size, Image.Resampling.LANCZOS)
+        control_image = control_image.resize(target_size, Image.Resampling.LANCZOS)
+        
+        # Generate augmented image using ControlNet (text2img with depth conditioning)
+        with torch.autocast(self.device.type):
+            result = self.pipeline(
+                prompt=prompt,
+                image=control_image,  # Control image parameter for ControlNet
+                negative_prompt=negative_prompt,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                controlnet_conditioning_scale=controlnet_conditioning_scale,
+                generator=torch.Generator(device=self.device).manual_seed(42)
+            ).images[0]
+        
+        # Resize back to original size
+        original_size = (rgb_image.shape[1], rgb_image.shape[0])  # (W, H)
+        result = result.resize(original_size, Image.Resampling.LANCZOS)
+        
+        # Convert back to numpy array
+        result_np = np.array(result) / 255.0
+        
+        # # Blend with original image using mask
+        # mask_3d = np.stack([mask] * 3, axis=-1).astype(np.float32)
+        # blended = rgb_image * (1 - mask_3d) + result_np * mask_3d
+        
+        return result_np
     
     def batch_augment_textures(self,
                               rendered_data: List[Dict],

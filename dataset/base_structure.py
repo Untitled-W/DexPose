@@ -11,6 +11,7 @@ from data_process.mesh_renderer import MeshRenderer3D
 from data_process.vis_utils import visualize_pointclouds_and_mesh, get_multiview_dff, extract_pca, test_pca_matching
 from manotorch.manolayer import ManoLayer
 from utils.vis_utils import vis_pc_coor_plotly
+from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate_feature, get_contact_pts, find_longest_false_substring
 
 # ORIGIN_DATA_PATH = {
 #     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco",
@@ -132,7 +133,11 @@ class BaseDatasetProcessor(ABC):
     @staticmethod
     def orientation_to_elev_azim(orientation: np.ndarray) -> tuple:
         """
-        Convert a 3D orientation vector to elevation and azimuth angles.
+        Convert a 3D orientation vector to elevation and azimuth angles for PyTorch3D.
+        
+        PyTorch3D uses y-up coordinate system where:
+        - elev: angle between vector and horizontal plane (xz-plane, y=0)
+        - azim: angle between projection on xz-plane and reference vector (0,0,1)
         
         Args:
             orientation: 3D vector (unnormalized) pointing from object to camera position
@@ -140,7 +145,7 @@ class BaseDatasetProcessor(ABC):
         Returns:
             tuple: (elevation, azimuth) in degrees
                 - elevation: angle above/below horizontal plane (-90 to 90 degrees)
-                - azimuth: angle around vertical axis (0 to 360 degrees)
+                - azimuth: angle from +z axis on horizontal plane (0 to 360 degrees)
         """
         # Normalize the orientation vector
         norm = np.linalg.norm(orientation)
@@ -149,13 +154,15 @@ class BaseDatasetProcessor(ABC):
         orientation = orientation / norm
         x, y, z = orientation
         
-        # Calculate elevation (angle from horizontal plane)
-        elevation = np.arcsin(np.clip(z, -1.0, 1.0))
+        # Calculate elevation (angle from horizontal xz-plane)
+        # In y-up system, elevation is angle between vector and xz-plane
+        elevation = np.arcsin(np.clip(y, -1.0, 1.0))
         elevation_deg = np.degrees(elevation)
         
-        # Calculate azimuth (angle in horizontal plane from positive x-axis)
-        # azimuth = arctan2(y, x)
-        azimuth = np.arctan2(y, x)
+        # Calculate azimuth (angle from +z axis on xz-plane)
+        # Project vector onto xz-plane and measure angle from +z axis
+        # In y-up system, azimuth is measured from +z axis towards +x axis
+        azimuth = np.arctan2(-x, z)
         azimuth_deg = np.degrees(azimuth)
         
         # Ensure azimuth is in [0, 360) range
@@ -227,47 +234,74 @@ class BaseDatasetProcessor(ABC):
         hand_joints = hand_dict.joints + hand_tsl[:, None, :3]  # T X 16 X 3
         
         # Load object data
-        object_transf_ls, object_name_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices)
-        if object_transf_ls is None: return None
+        object_transf_ls_raw, object_name_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices)
+        if object_transf_ls_raw is None: return None
+        obj_transf_ls = [yup2xup @ torch.from_numpy(obj_transf).float().to('cuda') 
+                        if isinstance(obj_transf, np.ndarray) else yup2xup @ obj_transf.to('cuda') 
+                        for obj_transf in object_transf_ls_raw]
 
+        ### render & feature & contact points
         object_points_ls = []
         object_features_ls = []
-        for idx, object_mesh_path in enumerate(object_mesh_path_ls):
+        contact_indices_ls = []
+        start_idx, end_idx = 1e10, 0
+        ### get camera orientation
+        render_at_tidx = 0
+        obj_inv_transf = torch.inverse(obj_transf_ls[0]).to(hand_joints.device)
+        hand_inv_joints = hand_joints @ obj_inv_transf[:, :3, :3].transpose(1, 2) + obj_inv_transf[:, :3, 3].unsqueeze(1)
+        orientation = hand_inv_joints[render_at_tidx, 0].cpu().numpy()
+        orientation[2] += 0.15
+        ### get camera orientation
+        for obj_part_idx, object_mesh_path in enumerate(object_mesh_path_ls):
             self.renderer.load_mesh(object_mesh_path, scale=0.01)
-            orientation = hand_tsl[0].cpu().numpy() - object_transf_ls[idx][0, :3, 3]
             elev, azim = self.orientation_to_elev_azim(orientation)
             camera_params = [
-                {'elev': elev, 'azim': azim, 'fov': 60},     # hand orientation
+                {'elev': elev, 'azim':  azim, 'fov': 60},     # hand orientation
             ]
             R_w2v, T_w2v = self.renderer.setup_cameras(camera_params, auto_distance=True)
             self.renderer.render_views(image_size=256, lighting_type='ambient')
-            
-            self.renderer.extract_features(prompt="a product package, cracker box")
+            texture_prompts = ["a wooden shovel, high quality", "a metal shovel, high quality"]
+            self.renderer.augment_textures(texture_prompts, num_variations=1, save_dir="test_res")
+            self.renderer.extract_features(prompt="a shovel", w_aug_texture=True)
             rgbs, depths, masks, points_ls, features = self.renderer.get_rendered_data()
+            # features (num_views, num_texture, feature_dim, height, width)
             all_points_dff, all_features_dff = get_multiview_dff(points_ls, masks, features,
                                                     n_points=1000)
+            
+            ### get contact point indices
+            obj_points_trans_ori = apply_transformation_pt(all_points_dff, obj_transf_ls[obj_part_idx])
+            hand_key_joints = get_key_hand_joints(hand_joints)
+            hand_key_features = intepolate_feature(hand_key_joints, all_features_dff[0], obj_points_trans_ori)
+            contact_indices = get_contact_pts(all_points_dff, all_features_dff[0],
+                                                hand_key_features, n_pts=100 // len(object_mesh_path_ls))
+            ### get contact point indices
+            
+            ### get the contact timesteps
+            distance = torch.norm(hand_key_joints[..., None, :] - obj_points_trans_ori[..., None, :, :], dim=-1, p=2)
+            min_dis, min_dis_idx = torch.min(distance, dim=-1)
+            untouch_mask = torch.min(min_dis, dim=-1)[0] > 0.02
+            start_idx_, end_idx_ = find_longest_false_substring(untouch_mask)
+            start_idx = min(start_idx, start_idx_)
+            end_idx = max(end_idx, end_idx_)
+            ### get the contact timesteps
+
             object_points_ls.append(all_points_dff)
             object_features_ls.append(all_features_dff)
+            contact_indices_ls.append(contact_indices)
+        contact_indices = torch.cat(contact_indices_ls, dim=-1)
+        ### render & feature & contact points
 
-        # Convert to tensors and apply transformations
-        obj_transf_ls = [yup2xup @ torch.from_numpy(obj_transf).float().to('cuda') 
-                        if isinstance(obj_transf, np.ndarray) else yup2xup @ obj_transf.to('cuda') 
-                        for obj_transf in object_transf_ls]
-        
+        # #### DEBUG CODE
+        # w2c = torch.eye(4).unsqueeze(0)
+        # w2c[..., :3, :3] = R_w2v.cpu()
+        # w2c[..., :3, 3] = T_w2v.cpu()
+        # c2w = torch.inverse(w2c)
+        # # self.renderer.visualize_all_views()
+        # vis_pc_coor_plotly([object_points_ls[0].cpu().numpy(), orientation.reshape(1, 3)], 
+        #                    gt_hand_joints=hand_inv_joints[0].cpu().numpy(),
+        #                    transformation_ls=c2w, show_axis=True)       
+        # #### DEBUG CODE
 
-        #### DEBUG CODE
-        obj_transf = obj_transf_ls[0]
-        obj_inv_transf = torch.inverse(obj_transf)
-        hand_inv_joints = hand_joints @ obj_inv_transf[:, :3, :3].transpose(1, 2) + obj_inv_transf[:, :3, 3].unsqueeze(1)
-        w2c = torch.eye(4).unsqueeze(0)
-        w2c[..., :3, :3] = R_w2v.cpu()
-        w2c[..., :3, 3] = T_w2v.cpu()
-        # obj_trans_points = object_points_ls[0].unsqueeze(0) @ obj_transf_ls[0][:, :3, :3].transpose(1, 2) + obj_transf_ls[0][:, :3, 3].unsqueeze(1)
-        vis_pc_coor_plotly([object_points_ls[0].cpu().numpy()], 
-                           gt_hand_joints=hand_inv_joints[0].cpu().numpy(),
-                           transformation_ls=torch.inverse(w2c), show_axis=True)
-        #### DEBUG CODE
-    
         sequence_data = HumanSequenceData(
             hand_tsls=hand_tsl.cpu(),
             hand_coeffs=hand_coeffs.cpu(),
