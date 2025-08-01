@@ -85,7 +85,7 @@ def main(data_id: int, dexycb_dir: str, robots: Optional[List[RobotName]] = None
 
 
 
-def test(data_id: int = 4, robots: Optional[List[RobotName]] = [RobotName.allegro], dexycb_dir: str = '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data', hand_type: str = "right", fps: int = 10):
+def test(data_id, robots: Optional[List[RobotName]] = [RobotName.allegro], dexycb_dir: str = '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data', hand_type: str = "right", fps: int = 10):
 
     robot_name = robots[0]
     robot_name_str = str(robot_name).split(".")[-1]
@@ -100,6 +100,10 @@ def test(data_id: int = 4, robots: Optional[List[RobotName]] = [RobotName.allegr
     qpos_file = f'/home/qianxu/Desktop/Project/DexPose/retarget_test/hand_qpos/{robot_name_str}_seq_{data_id}_qpos.npy'
     qpos = np.load(qpos_file)
 
+    # with open('log/render_qpos_check3.log', 'wb') as f:
+    #     for i in range(qpos.shape[0]):
+    #         f.write(f"Frame {i}: {qpos[i]}\n".encode('utf-8'))
+
     ### hand meshes ###
     hand_meshes = []
     for i in range(qpos.shape[0]):
@@ -107,6 +111,10 @@ def test(data_id: int = 4, robots: Optional[List[RobotName]] = [RobotName.allegr
         hand_mesh = robot.get_hand_mesh()
         # print(len(hand_mesh.vertices), len(hand_mesh.triangles))
         hand_meshes.append(hand_mesh)
+
+    # with open('log/render_hand_mesh_check2.log', 'wb') as f:
+    #     for i, hand_mesh in enumerate(hand_meshes):
+    #         f.write(f"Frame {i}: {np.asarray(hand_meshes[-1].vertices)[:10]} vertices, {len(hand_mesh.triangles)} triangles\n".encode('utf-8'))
 
     extrinsic_mat =sampled_data["extrinsics"] 
     pose_vec = pt.pq_from_transform(extrinsic_mat)

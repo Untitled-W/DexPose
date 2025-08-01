@@ -444,7 +444,7 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 joints[0, :],
                 wrist_quat,
                 hand_type=self.hand_type,
-                is_mano_convention=True,
+                is_mano_convention=False,
             )
 
         # Loop rendering
