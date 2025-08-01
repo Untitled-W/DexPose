@@ -57,23 +57,9 @@ sys.path.append('/home/qianxu/Desktop/New_Folder/data_process')
 sys.path.append('/home/qianxu/Project25/feature_extract')
 from vision.featurizer.run_featurizer import extract_ft_tensor
 from vision.featurizer.utils.visualization import IMG_SIZE
+from scipy.spatial.transform import Rotation as R
 
-# Import new modules for enhanced functionality
-try:
-    from texture_augmentation import TextureAugmentator, get_texture_prompts
-    TEXTURE_AUGMENTATION_AVAILABLE = True
-except ImportError:
-    TEXTURE_AUGMENTATION_AVAILABLE = False
-    print("Warning: texture_augmentation module not available")
-
-# Feature visualization imports (disabled for now)
-FEATURE_VISUALIZATION_AVAILABLE = False
-# try:
-#     from feature_visualization import FeaturePCAVisualizer
-#     FEATURE_VISUALIZATION_AVAILABLE = True
-# except ImportError:
-#     FEATURE_VISUALIZATION_AVAILABLE = False
-#     print("Warning: feature_visualization module not available")
+from data_process.texture_augmentation import TextureAugmentator, get_texture_prompts
 
 class MeshRenderer3D:
     """
@@ -278,12 +264,24 @@ class MeshRenderer3D:
             
             # Generate camera position using PyTorch3D's look_at_view_transform
             # This returns world-to-view transformation components (R, T)
-            R_w2v, T_w2v = look_at_view_transform(
+            R_w2v_yup, T_w2v_yup = look_at_view_transform(
                 dist=dist, 
                 elev=elev, 
                 azim=azim,
                 device=self.device
             )
+
+            ### Align the y-axis of the camera to the z-axis of the mesh
+            w2v_yup = torch.eye(4).unsqueeze(0).to(R_w2v_yup.device)
+            w2v_yup[..., :3, :3] = R_w2v_yup
+            w2v_yup[..., :3, 3] = T_w2v_yup
+            v2w_yup = torch.inverse(w2v_yup)
+            rotation_matrix = np.eye(4)
+            rotation_matrix[:3, :3] = R.from_rotvec([0, 0, np.pi/2]).as_matrix()
+            v2w_xup = v2w_yup @ torch.from_numpy(rotation_matrix).to(R_w2v_yup.device).unsqueeze(0).to(torch.float32)
+            w2v_xup = torch.inverse(v2w_xup)
+            R_w2v = w2v_xup[..., :3, :3]
+            T_w2v = w2v_xup[..., :3, 3]
 
             camera = FoVPerspectiveCameras(
                 device=self.device,
@@ -471,7 +469,7 @@ class MeshRenderer3D:
         self.ftype = ftype
         self.featurizer = featurizers[ftype]()
 
-    def extract_features(self, prompt: Optional[str] = None) -> None:
+    def extract_features(self, prompt: Optional[str] = None, w_aug_texture:bool=True) -> None:
         """
         Extract features from RGB images using existing featurizers
         
@@ -484,14 +482,22 @@ class MeshRenderer3D:
             
         for data in self.rendered_data:
             ###0701 fix! due to python3.8 type error, load torch model may fail.
-            
-            features = extract_ft_tensor(data['rgb'].permute(2, 0, 1), self.featurizer,
+            if w_aug_texture:
+                imgs = data['aug_rgbs']
+                features_ls = []
+                for img in imgs:
+                    features = extract_ft_tensor(img.permute(2, 0, 1), self.featurizer,
                                          prompt=prompt, 
-                                         dest_size=data['rgb'].shape[:2])
-
-            # Store features
-            data['features'] = features
-            data['feature_type'] = self.ftype
+                                         dest_size=img.shape[:2])
+                    features_ls.append(features)
+                data['features'] = torch.cat(features_ls, dim=0)
+                data['feature_type'] = self.ftype
+            else:
+                features = extract_ft_tensor(data['rgb'].permute(2, 0, 1), self.featurizer,
+                                            prompt=prompt, 
+                                            dest_size=data['rgb'].shape[:2])
+                data['features'] = features
+                data['feature_type'] = self.ftype
             
         # print(f"Extracted {ftype} features for {len(self.rendered_data)} views")
     
@@ -633,7 +639,7 @@ class MeshRenderer3D:
 
         if 'features' in self.rendered_data[0]:
             # Stack features if available
-            all_views_features = torch.cat([data['features'] for data in self.rendered_data], dim=0)
+            all_views_features = torch.stack([data['features'] for data in self.rendered_data], dim=0)
         else:
             all_views_features = None
 
@@ -657,7 +663,6 @@ class MeshRenderer3D:
 
     def augment_textures(self, 
                         texture_prompts: List[str],
-                        num_variations: int = 2,
                         strength: float = 0.8,
                         guidance_scale: float = 7.5,
                         save_dir: Optional[str] = None,
@@ -675,61 +680,45 @@ class MeshRenderer3D:
         Returns:
             Dictionary mapping view indices to lists of augmented images
         """
-        if not TEXTURE_AUGMENTATION_AVAILABLE:
-            raise ImportError("Texture augmentation module not available. Check imports.")
-            
         if not self.rendered_data:
             raise ValueError("No rendered data available. Call render_views() first.")
             
         if not self.texture_augmentator:
             print("Initializing texture augmentator...")
             self.texture_augmentator = TextureAugmentator(device=self.device)
-            
-        print(f"Applying texture augmentation to {len(self.rendered_data)} views...")
-        augmented_results = {}
         
         for i, data in enumerate(self.rendered_data):
             if 'rgb' not in data or 'depth' not in data:
                 print(f"Skipping view {i}: missing RGB or depth data")
                 continue
-                
-            # Get prompt for this view
-            prompt = texture_prompts[i % len(texture_prompts)]
-            
-            print(f"Augmenting view {i} with prompt: '{prompt}'")
             
             # Prepare RGB and depth as numpy arrays for texture augmentation
-            rgb_np = data['rgb']  # Already in 0-1 range
-            depth_np = data['depth']  # Already in 0-1 range
+            rgb_np = data['rgb'].cpu().numpy()  # in 0-1 range
+            depth_np = data['depth'].cpu().numpy()  # in 0-100 range
+            depth_np[depth_np == 100] = 0
+            mask_np = data['mask'].cpu().numpy()  # (H, W) Mask where alpha > 0
             
             # Generate augmented textures (multiple variations)
-            augmented_images = []
-            for j in range(num_variations):
-                augmented_img = self.texture_augmentator.augment_texture(
-                    rgb_image=rgb_np,
-                    depth_image=depth_np,
-                    mask=data.get('mask', np.ones_like(data['depth'])),
+            augmented_images_ls = []
+            for prompt in texture_prompts:
+                augmented_img_np = self.texture_augmentator.augment_texture(
+                    rgb_image=rgb_np, # (h, w, 3) RGB image in 0-1 range
+                    depth_image=depth_np, # (h, w) Depth image in 0-100 range
+                    mask=mask_np,
                     prompt=prompt,
                     guidance_scale=guidance_scale,
                     controlnet_conditioning_scale=strength,
-                    strength=strength,
-                    **kwargs  # Pass through additional parameters
                 )
-                augmented_images.append(augmented_img)
+                augmented_img = torch.from_numpy(augmented_img_np).to(torch.float32).to(data['rgb'].device)
+                augmented_images_ls.append(augmented_img)
             
-            augmented_results[f"view_{i:03d}"] = augmented_images
-            
+            augmented_images = torch.stack(augmented_images_ls, dim=0)  # (num_variations, H, W, 3)
+            data['aug_rgbs'] = augmented_images
             # Save if directory provided
             if save_dir:
                 os.makedirs(save_dir, exist_ok=True)
-                for j, aug_img in enumerate(augmented_images):
+                for j, aug_img in enumerate(augmented_images_ls):
                     save_path = os.path.join(save_dir, f"view_{i:03d}_texture_{j}.png")
-                    # Convert numpy array to PIL Image for saving
-                    if isinstance(aug_img, np.ndarray):
-                        aug_img_pil = Image.fromarray((aug_img * 255).astype(np.uint8))
-                        aug_img_pil.save(save_path)
-                    else:
-                        aug_img.save(save_path)
-                    
-        print(f"Generated {sum(len(imgs) for imgs in augmented_results.values())} augmented images")
-        return augmented_results
+
+                    aug_img_pil = Image.fromarray((aug_img.cpu().numpy() * 255).astype(np.uint8))
+                    aug_img_pil.save(save_path)
