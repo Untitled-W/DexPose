@@ -39,10 +39,10 @@ DATASET_CONFIGS = {
         'processor_name': 'oakinkv2',
         'load_path': HUMAN_SEQ_PATH['Oakinkv2'],
         'save_path': DEX_SEQ_PATH['Oakinkv2'],
-        'task_interval': 10,
+        'task_interval': 20,
         'which_dataset': 'Oakinkv2',
-        'seq_data_name': 'debug',
-        'sequence_indices': list(range(0, 5))  # Example sequence indices for processing
+        'seq_data_name': 'retarget',
+        'sequence_indices': list(range(0, 1))  # Example sequence indices for processing
     },
     
     'taco': {
@@ -51,8 +51,8 @@ DATASET_CONFIGS = {
         'save_path': DEX_SEQ_PATH['Taco'],
         'task_interval': 1,
         'which_dataset': 'Taco',
-        'seq_data_name': 'debug',
-        'sequence_indices': list(range(0, 10))  # Example sequence indices for processing
+        'seq_data_name': 'retarget',
+        'sequence_indices': list(range(0, 1))  # Example sequence indices for processing
     },
 
     'dexycb': {
@@ -61,8 +61,8 @@ DATASET_CONFIGS = {
         'save_path': DEX_SEQ_PATH['DexYCB'],
         'task_interval': 1,
         'which_dataset': 'DexYCB',
-        'seq_data_name': 'debug',
-        'sequence_indices': list(range(1, 2))  # Example sequence indices for processing
+        'seq_data_name': 'retarget',
+        'sequence_indices': list(range(0, 1))  # Example sequence indices for processing
     }
 }
 
@@ -87,12 +87,14 @@ def main_retarget(dataset_names: List[str], robots: List[RobotName]):
 
         for idx in tqdm(DATASET_CONFIGS[dataset_name]['sequence_indices'], desc=f"Processing {dataset_name}"):
             sampled_data = load_data[idx]
-            hand_side = HandType.right if sampled_data.side == '1' else HandType.left
+            hand_side = HandType.right if sampled_data.side == 1 else HandType.left
+            if hand_side == HandType.left: continue
             viewer = RobotHandDatasetSAPIENViewer(
                 list(robots), hand_side, headless=True, use_ray_tracing=True
             )
             data_id = sampled_data.which_dataset + "_" + sampled_data.which_sequence
 
+            import torch
             viewer.load_object_hand_dex(sampled_data)
             outputs = viewer.retarget_and_save_dex(sampled_data, data_id)
             processed_data.extend(outputs)
@@ -144,8 +146,9 @@ def check_data_correctness_by_vis(dex_data: List[DexSequenceData]):
 
 if __name__ == "__main__":
 
-    dataset_names = ['dexycb'] #, 'taco', 'oakinkv2']
-    robots = [RobotName.allegro]#, RobotName.shadow, RobotName.leap]
+    dataset_names = ['dexycb', 'taco', 'oakinkv2']
+    # robots = [RobotName.allegro, RobotName.shadow, RobotName.leap]
+    robots = [RobotName.inspire]
     robot_dir = (
         Path("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets").absolute() / "robots" / "hands"
     )
@@ -170,4 +173,4 @@ if __name__ == "__main__":
 
     # show_human_statistics(processed_data)
     
-    # check_data_correctness_by_vis(processed_data)
+    check_data_correctness_by_vis(processed_data)

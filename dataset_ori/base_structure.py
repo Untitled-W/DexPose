@@ -8,7 +8,6 @@ import torch
 import open3d as o3d
 from tqdm import tqdm
 from manotorch.manolayer import ManoLayer
-from utils.vis_utils import vis_pc_coor_plotly
 
 
 WMQ_IS_USING = True
@@ -132,7 +131,7 @@ class BaseDatasetProcessor(ABC):
         self.sequence_indices = sequence_indices if sequence_indices is not None else list(range(len(self.data_ls)))
 
         self.seq_save_path = f'{save_path}/seq_{seq_data_name}_{task_interval}.p'
-        self.manolayer = ManoLayer(rot_mode='quat', side='right', use_pca=False).cuda()
+        self.manolayer = ManoLayer(rot_mode='quat', side='right', use_pca=False)
 
     @staticmethod
     def orientation_to_elev_azim(orientation: np.ndarray) -> tuple:
@@ -228,8 +227,6 @@ class BaseDatasetProcessor(ABC):
         # Process hand data
         hand_tsl, hand_coeffs = self._get_hand_info(raw_data, side, frame_indices)
         if hand_tsl is None: return None
-        hand_dict = self.manolayer(hand_coeffs.reshape(-1, 16, 4), torch.zeros((hand_coeffs.shape[0], 10), device=hand_coeffs.device))
-        hand_joints = hand_dict.joints + hand_tsl[:, None, :3]  # T X 16 X 3
         
         # Load object data
         object_transf_ls, object_name_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices)
