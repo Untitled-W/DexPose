@@ -112,15 +112,15 @@ def get_multiview_dff(
     pixel_coords[:, 0] = torch.flip(pixel_coords[:, 0], dims=[0])
     # grid = arange_pixels((H, W), invert_y_axis=False)[0].to(device).reshape(1, H, W, 2).half()
 
-    ft_per_vertex = torch.zeros((len(ds_points), features.shape[-3])).to(features.device)
+    ft_per_vertex = torch.zeros((features.shape[-4], len(ds_points), features.shape[-3])).to(features.device)
     ft_per_vertex_count = torch.zeros((len(ds_points), 1)).half().to(features.device)
     points_ls = [points.to(features.device) for points in points_ls]
 
     features_ls = []
     for idx in range(len(points_ls)):
-        aligned_features = features[idx].flatten(1)
+        aligned_features = features[idx].flatten(2)
         indices = masks[idx].flatten(0)
-        features_per_pixel = aligned_features[:, indices]
+        features_per_pixel = aligned_features[:, :, indices]
 
         queried_indices = ball_query(
                 points_ls[idx].unsqueeze(0),
@@ -133,12 +133,12 @@ def get_multiview_dff(
         mask_close = queried_indices != -1
         repeat = mask_close.sum(dim=1) # (num_feature,)
         ft_per_vertex_count[queried_indices[mask_close]] += 1
-        ft_per_vertex[queried_indices[mask_close]] += features_per_pixel.repeat_interleave(repeat, dim=1).T
+        ft_per_vertex[:, queried_indices[mask_close]] += features_per_pixel.repeat_interleave(repeat, dim=-1).transpose(-2, -1)
 
-        features_ls.append(features_per_pixel.T)
+        features_ls.append(features_per_pixel.transpose(-2, -1))
     
     idxs = (ft_per_vertex_count != 0)[:, 0]
-    ft_per_vertex[idxs, :] = ft_per_vertex[idxs, :] / ft_per_vertex_count[idxs, :]
+    ft_per_vertex[:, idxs, :] = ft_per_vertex[:, idxs, :] / ft_per_vertex_count[idxs, :]
     missing_features = len(ft_per_vertex_count[ft_per_vertex_count == 0])
     # print("Number of missing features: ", missing_features)
     # print("Copied features from nearest vertices")
@@ -150,7 +150,7 @@ def get_multiview_dff(
             ds_points[missing_indices], ds_points[filled_indices], p=2
         )
         closest_vertex_indices = torch.argmin(distances, dim=1).cpu()
-        ft_per_vertex[missing_indices, :] = ft_per_vertex[filled_indices][
+        ft_per_vertex[:, missing_indices, :] = ft_per_vertex[:, filled_indices][
             closest_vertex_indices, :
         ]
 
