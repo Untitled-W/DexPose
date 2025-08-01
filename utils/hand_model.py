@@ -214,7 +214,7 @@ def load_robot(robot_name_str: str, side):
     }
 
     robot = HandModelURDF(robot_name_str,
-                          f'/home/qianxu/Desktop/Project/DexPose/retarget_test/urdf/{urdf_name_map(robot_name_str, side)}_glb.urdf',
+                          f'/home/qianxu/Desktop/Project/DexPose/retarget/urdf/{urdf_name_map(robot_name_str, side)}_glb.urdf',
                           f'/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/{asset_name_map[robot_name_str]}/meshes',
                         )
 

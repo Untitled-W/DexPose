@@ -18,7 +18,7 @@ from pytorch3d.transforms import (
     quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion, quaternion_to_axis_angle
 )
 from pytransform3d import transformations as pt
-# from manopth.manolayer import ManoLayer
+
 from manotorch.manolayer import ManoLayer
 
 from .base_structure import BaseDatasetProcessor, DatasetRegistry, HumanSequenceData, ORIGIN_DATA_PATH, HUMAN_SEQ_PATH
@@ -232,8 +232,8 @@ class OAKINKv2Processor(BaseDatasetProcessor):
         hand_transformation[:, :3, :3] = quaternion_to_matrix(hand_rotation_quat)
         h_coeffs[:, 0] = matrix_to_quaternion(yup2xup[:3, :3] @ hand_transformation[:, :3, :3])
         h_tsl = self._apply_transformation_pt(h_tsl, yup2xup)
-        
-        return h_tsl, h_coeffs
+
+        return h_tsl.squeeze(), h_coeffs
 
     def _get_object_info(self, raw_data: Dict[str, Any], frame_indices: List[int]) -> Tuple[List[torch.Tensor], List[str]]:
         """Load OAKINKv2 object data."""
@@ -485,7 +485,8 @@ class DexYCBProcessor(BaseDatasetProcessor):
         hand_pose_frame = raw_data['hand_pose'][frame_indices]
         p = torch.from_numpy(hand_pose_frame[..., : 48].astype(np.float32))
 
-        xx = ManoLayer(
+        from manopth.manolayer import ManoLayer as _ManoLayer
+        xx = _ManoLayer(
             flat_hand_mean=False,
             ncomps=45,
             side="left" if side == 'l' else 'right',
@@ -560,8 +561,8 @@ DATASET_CONFIGS = {
         'save_path': HUMAN_SEQ_PATH['Oakinkv2'],
         'task_interval': 20,
         'which_dataset': 'Oakinkv2',
-        'seq_data_name': 'feature',
-        'sequence_indices': list(range(0, 5))  # Example sequence indices for processing
+        'seq_data_name': 'retarget',
+        'sequence_indices': list(range(0, 1))  # Example sequence indices for processing
     },
     
     'taco': {
@@ -570,8 +571,8 @@ DATASET_CONFIGS = {
         'save_path': HUMAN_SEQ_PATH['Taco'],
         'task_interval': 1,
         'which_dataset': 'Taco',
-        'seq_data_name': 'feature',
-        'sequence_indices': list(range(0, 10))  # Example sequence indices for processing
+        'seq_data_name': 'retarget',
+        'sequence_indices': list(range(10, 11))  # Example sequence indices for processing
     },
 
     'dexycb': {
@@ -580,8 +581,8 @@ DATASET_CONFIGS = {
         'save_path': HUMAN_SEQ_PATH['DexYCB'],
         'task_interval': 1,
         'which_dataset': 'DexYCB',
-        'seq_data_name': 'feature',
-        'sequence_indices': list(range(0, 3))  # Example sequence indices for
+        'seq_data_name': 'retarget',
+        'sequence_indices': list(range(0, 1))  # Example sequence indices for
     }
 }
 
@@ -769,7 +770,8 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
     for dataset_name, data_list in dataset_data.items():
         print(f"Dataset {dataset_name} has {len(data_list)} sequences")
         # Sample a few sequences for visualization
-        sampled_data = random.sample(data_list, 2)
+        # sampled_data = random.sample(data_list, 2)
+        sampled_data = data_list
         for d in sampled_data:
             print(f"Visualizing sequence {d.which_sequence}")
             visualize_human_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/dataset/vis_results/{d.which_dataset}_{d.which_sequence}.html')
@@ -778,6 +780,7 @@ if __name__ == "__main__":
 
     # dataset_names = ['dexycb', 'taco', 'oakinkv2']
     dataset_names = ['taco']
+    # dataset_names = ['dexycb']
     processed_data = []
     
     GENERATE = True
