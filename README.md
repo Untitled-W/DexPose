@@ -1,5 +1,27 @@
 # DexPose
 
+## Environment Setup
+
+```
+conda create -n anytelop python=3.9
+pip install torch==1.13.0+cu117 torchvision==0.14.0+cu117 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cu117
+pip install open3d pytorch-kinematics
+
+cd thirdparty/dex-retargeting
+pip install -e .
+cd thirdparty/pytorch3d
+pip install -e .
+cd thirdparty/manopth
+pip install -e .
+cd thirdparty/manotorch
+pip install -e .
+
+# be aware of this, sometimes problematic
+pip install torch_cluster --no-index -f https://data.pyg.org/whl/torch-1.13.0%2Bcu117.html
+
+pip install chumpy
+```
+
 ## Repo Structure
 
 ```
@@ -54,7 +76,3 @@ open_clip_torch==2.24.0
 einops==0.7.0
 openai
 
-
-pip install torch==1.13.0+cu117 torchvision==0.14.0+cu117 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cu117
-
-hi

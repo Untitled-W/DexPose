@@ -5,22 +5,25 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "log vis",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "log.vis"
+        },
+        {
             "name": "render_hand",
             "type": "debugpy",
             "request": "launch",
             "module": "retarget_test.render_hand_object",
-            "python":"${command:python.interpreterPath}"
+            "python": "${command:python.interpreterPath}"
         },
-
-
         {
             "name": "anyteleop",
             "type": "debugpy",
             "request": "launch",
             "module": "retarget.anyteleop",
-            "python":"${command:python.interpreterPath}"
+            "python": "${command:python.interpreterPath}"
         },
-        
         {
             "name": "preprocessor",
             "type": "debugpy",
