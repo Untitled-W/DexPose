@@ -742,7 +742,8 @@ def vis_frames_plotly(pc_ls:List[np.ndarray]=None, hand_pts_ls:List[np.ndarray]=
     """
     visulize everything as frames in plotly
     """
-    print(len(pc_ls), pc_ls[0].shape)
+    print(len(gt_hand_joints), gt_hand_joints[0].shape)
+
     if hand_mesh is not None:
         T = len(hand_mesh)
     else:
