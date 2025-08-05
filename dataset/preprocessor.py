@@ -374,10 +374,9 @@ class TACOProcessor(BaseDatasetProcessor):
         else:
             return "unknown", "object", "target"
     
-    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Process TACO hand data."""
+    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int], pre_trans:torch.Tensor=None, device = torch.device('cuda')) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Process TACO hand data. The ONLY transformation applied is the pre_trans."""
         hand_pose_dir = raw_data['hand_pose_dir']
-        device = torch.device('cuda')
         
         # Load hand poses
         if side == 'r':
@@ -399,24 +398,23 @@ class TACOProcessor(BaseDatasetProcessor):
         hand_thetas_raw = torch.from_numpy(np.float32(hand_theta_list)).to(device)
         hand_trans_raw = torch.from_numpy(np.float32(hand_trans_list)).to(device)
         
+        if pre_trans is None:
+            pre_trans = torch.eye(4).to(device)
+
         # Convert to quaternions
         hand_thetas_raw = axis_angle_to_quaternion(hand_thetas_raw.reshape(hand_thetas_raw.shape[0], 16, 3))
-        
-        # Apply coordinate transformation
-        yup2xup = torch.eye(4).to(device)
-        
-        hand_transform = torch.eye(4).to('cuda').unsqueeze(0).repeat((hand_thetas_raw.shape[0], 1, 1))
+        hand_transform = torch.eye(4).to(device).unsqueeze(0).repeat((hand_thetas_raw.shape[0], 1, 1))
         hand_transform[:, :3, :3] = quaternion_to_matrix(hand_thetas_raw[:, 0])
         hand_transform[:, :3, 3] = hand_trans_raw
-        hand_transform = yup2xup @ hand_transform
+        hand_transform = pre_trans @ hand_transform
         hand_thetas_raw[:, 0] = matrix_to_quaternion(hand_transform[:, :3, :3])
         hand_trans_raw = hand_transform[:, :3, 3]
         
         return hand_trans_raw[frame_indices], hand_thetas_raw[frame_indices]
     
 
-    def _get_object_info(self, raw_data: Dict[str, Any], frame_indices: List[int]) -> Tuple[List[torch.Tensor], List[str]]:
-        """Load TACO object data."""
+    def _get_object_info(self, raw_data: Dict[str, Any], frame_indices: List[int], pre_trans:torch.Tensor=None, device = torch.device('cuda')) -> Tuple[List[torch.Tensor], List[str]]:
+        """Load TACO object data"""
         obj_name = raw_data['obj_name']
         obj_poses = raw_data['obj_poses']
         
@@ -424,8 +422,9 @@ class TACOProcessor(BaseDatasetProcessor):
         obj_path = os.path.join(self.obj_dir, obj_name + "_cm.obj")
 
         # Apply coordinate transformation
-        yup2xup = self._apply_coordinate_transform(raw_data['side']).T
-        obj_poses_transformed = yup2xup.cpu().numpy().astype(np.float32) @ obj_poses
+        if pre_trans is None:
+            pre_trans = torch.eye(4).to(device)
+        obj_poses_transformed = pre_trans @ torch.from_numpy(obj_poses).to(device).float()
         obj_transf_subset = obj_poses_transformed[frame_indices]
 
         # Store mesh path

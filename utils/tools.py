@@ -22,7 +22,7 @@ from pytorch3d.transforms import (
 )
 from manotorch.manolayer import ManoLayer
 
-from dataset.base_structure import HumanSequenceData, DexSequenceData
+# from dataset.base_structure import HumanSequenceData, DexSequenceData
 def rotation_6d_to_matrix(d6: torch.Tensor) -> torch.Tensor:
     """
     Converts 6D rotation representation by Zhou et al. [1] to rotation matrix
@@ -457,7 +457,6 @@ def extract_hand_points_and_mesh(hand_tsls, hand_coeffs, side):
     hand_joints += hand_tsls.cpu().numpy()[...,None,:]
 
     return hand_joints, hand_verts
-
 
 def compute_hand_geometry(hand_pose_frame, mano_layer):
     # pose parameters all zero, no hand is detected
