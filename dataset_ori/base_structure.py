@@ -227,7 +227,11 @@ class BaseDatasetProcessor(ABC):
         # Process hand data
         hand_tsl, hand_coeffs = self._get_hand_info(raw_data, side, frame_indices)
         if hand_tsl is None: return None
-        
+
+        from utils.tools import extract_hand_points_and_mesh
+        hand_joints = extract_hand_points_and_mesh(hand_tsl, hand_coeffs, side)[0]
+        hand_joints = torch.from_numpy(hand_joints).to('cuda')  # Convert to torch tensor and move to GPU
+
         # Load object data
         object_transf_ls, object_name_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices)
         if object_transf_ls is None: return None
@@ -271,6 +275,10 @@ class BaseDatasetProcessor(ABC):
             
             for seq_data in sequence_list:
                 for side in ['l', 'r']:
+
+                    if not (seq_data['which_sequence'] == '(pour in some, kettle, bowl)-20231019_027' and side == 'l'):
+                        continue
+
                     if seq_data.get(f'{side}_valid', True):  # Check if this side has valid data
                         processed_seq = self.process_sequence(seq_data, side)
                         if processed_seq is not None: whole_data_ls.append(processed_seq)

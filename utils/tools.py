@@ -370,6 +370,8 @@ def cosine_similarity_batch(a, b, batch_size=30000):
 
 def farthest_point_sampling(pos: torch.FloatTensor, n_sampling: int):
     bz, N = pos.size(0), pos.size(1)
+    if N == 0:
+        return torch.tensor([], dtype=torch.long, device=pos.device)
     feat_dim = pos.size(-1)
     device = pos.device
     sampling_ratio = float(n_sampling / N)
@@ -459,10 +461,20 @@ def extract_hand_points_and_mesh_manopth(hand_tsls, hand_coeffs, side):
 
 def extract_hand_points_and_mesh_manotorch(hand_tsls, hand_coeffs, side):
     from manotorch.manolayer import ManoLayer
-    if side == 0:
-        mano_layer = ManoLayer(center_idx=0, side='left', use_pca=False).cuda()
+
+    # it should be true
+    CENTER = True
+
+    if CENTER:
+        if side == 0:
+            mano_layer = ManoLayer(center_idx=0, side='left', use_pca=False).cuda()
+        else:
+            mano_layer = ManoLayer(center_idx=0, side='right', use_pca=False).cuda()
     else:
-        mano_layer = ManoLayer(center_idx=0, side='right', use_pca=False).cuda()
+        if side == 0:
+            mano_layer = ManoLayer(side='left', use_pca=False).cuda()
+        else:
+            mano_layer = ManoLayer(side='right', use_pca=False).cuda()
 
 
     output = mano_layer(quaternion_to_axis_angle(hand_coeffs.to('cuda')).reshape(-1, 48)) # manopth use axis_angle and should be (B, 48)
@@ -470,6 +482,18 @@ def extract_hand_points_and_mesh_manotorch(hand_tsls, hand_coeffs, side):
     hand_joints = hand_joints.cpu().numpy()
     hand_verts = hand_verts.cpu().numpy()
     hand_joints += hand_tsls.cpu().numpy()[...,None,:]
+
+    # print("Hand tsl")
+    # for i in hand_tsls[30]:
+    #     print(i)
+    # print("Hand coeffs")
+    # for i in hand_coeffs[30]:
+    #     print(i)
+    # print("Hand joints")
+    # for i in hand_joints[30]:
+    #     print(i)
+
+    # print("side:", side)
 
     return hand_joints, hand_verts
 

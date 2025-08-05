@@ -18,7 +18,6 @@ from pytorch3d.transforms import (
     quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion, quaternion_to_axis_angle
 )
 from pytransform3d import transformations as pt
-
 from manotorch.manolayer import ManoLayer
 
 from .base_structure import BaseDatasetProcessor, DatasetRegistry, HumanSequenceData, ORIGIN_DATA_PATH, HUMAN_SEQ_PATH
@@ -561,8 +560,8 @@ DATASET_CONFIGS = {
         'save_path': HUMAN_SEQ_PATH['Oakinkv2'],
         'task_interval': 20,
         'which_dataset': 'Oakinkv2',
-        'seq_data_name': 'retarget',
-        'sequence_indices': list(range(0, 1))  # Example sequence indices for processing
+        'seq_data_name': 'feature',
+        'sequence_indices': list(range(0, 5))  # Example sequence indices for processing
     },
     
     'taco': {
@@ -571,8 +570,8 @@ DATASET_CONFIGS = {
         'save_path': HUMAN_SEQ_PATH['Taco'],
         'task_interval': 1,
         'which_dataset': 'Taco',
-        'seq_data_name': 'retarget',
-        'sequence_indices': list(range(10, 11))  # Example sequence indices for processing
+        'seq_data_name': 'feature',
+        'sequence_indices': list(range(0, 10))  # Example sequence indices for processing
     },
 
     'dexycb': {
@@ -581,8 +580,8 @@ DATASET_CONFIGS = {
         'save_path': HUMAN_SEQ_PATH['DexYCB'],
         'task_interval': 1,
         'which_dataset': 'DexYCB',
-        'seq_data_name': 'retarget',
-        'sequence_indices': list(range(0, 1))  # Example sequence indices for
+        'seq_data_name': 'feature',
+        'sequence_indices': list(range(0, 3))  # Example sequence indices for 
     }
 }
 
@@ -774,13 +773,12 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
         sampled_data = data_list
         for d in sampled_data:
             print(f"Visualizing sequence {d.which_sequence}")
-            visualize_human_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/dataset/vis_results/{d.which_dataset}_{d.which_sequence}.html')
+            visualize_human_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/dataset/vis_results/{d.which_dataset}_{d.which_sequence}_{d.side}.html')
 
 if __name__ == "__main__":
 
     # dataset_names = ['dexycb', 'taco', 'oakinkv2']
     dataset_names = ['taco']
-    # dataset_names = ['dexycb']
     processed_data = []
     
     GENERATE = True
