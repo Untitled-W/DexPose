@@ -4,7 +4,13 @@
 
 ```
 conda create -n anytelop python=3.9
-pip install torch==1.13.0+cu117 torchvision==0.14.0+cu117 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cu117
+<!-- pip install torch==1.13.0+cu117 torchvision==0.14.0+cu117 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cu117 -->
+
+pip install torch==2.0.1+cu118 \
+            torchvision==0.15.2+cu118 \
+            torchaudio==2.0.2+cu118 \
+            --index-url https://download.pytorch.org/whl/cu118
+
 pip install open3d pytorch-kinematics
 
 cd thirdparty/dex-retargeting
@@ -17,7 +23,8 @@ cd thirdparty/manotorch
 pip install -e .
 
 # be aware of this, sometimes problematic
-pip install torch_cluster --no-index -f https://data.pyg.org/whl/torch-1.13.0%2Bcu117.html
+<!-- pip install torch_cluster --no-index -f https://data.pyg.org/whl/torch-1.13.0%2Bcu117.html -->
+pip install torch_cluster --no-index -f https://data.pyg.org/whl/torch-2.0.1%2Bcu118.html
 
 pip install chumpy
 ```
@@ -25,7 +32,7 @@ pip install chumpy
 ##
 
 
-Debug only need to inspect `python -m retarget_test.render_hand_object`
+Debug only need to inspect `python -m retarget_old.render_hand_object`
 - input: dexycb_format
 - output: html
 - directly use dex_retargeting code
