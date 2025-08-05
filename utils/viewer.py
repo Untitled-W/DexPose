@@ -454,7 +454,7 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             joints = joints.squeeze(0)
             vertex = vertex.squeeze(0)
 
-            print("Frame:", i, "Joints:", joints)
+            # print("Frame:", i, "Joints:", joints)
 
             # Update poses for YCB objects
             for k in range(num_ycb_objects):
@@ -479,12 +479,12 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             ):
                 indices = retargeting.optimizer.target_link_human_indices
                 ref_value = joints[indices, :]
-                print("Frame:", i, "Ref value:", ref_value)
+                # print("Frame:", i, "Ref value:", ref_value)
                 qpos_retarget = retargeting.retarget(ref_value)
                 qpos_sapien = qpos_retarget[retarget2sapien]
                 qpos_pk = qpos_retarget[retarget2pk]
-                print("Frame:", i, "Qpos Sapien:", qpos_sapien)
-                print("Frame:", i, "Qpos PK:", qpos_pk)
+                # print("Frame:", i, "Qpos Sapien:", qpos_sapien)
+                # print("Frame:", i, "Qpos PK:", qpos_pk)
                 robot.set_qpos(qpos_sapien)
                 qpos_dict[robot_name].append(qpos_pk.copy())
 
@@ -517,8 +517,8 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 extra_info=data.extra_info
             ))
 
-            print("QPOS:")
-            for i, q in enumerate(qpos_arr):
-                print(f"Frame {i}: {q}")
+            # print("QPOS:")
+            # for i, q in enumerate(qpos_arr):
+            #     print(f"Frame {i}: {q}")
 
         return retargeted_data

@@ -20,9 +20,7 @@ from pytorch3d.transforms import (
     axis_angle_to_quaternion, 
     quaternion_to_axis_angle
 )
-from manotorch.manolayer import ManoLayer
 
-# from dataset.base_structure import HumanSequenceData, DexSequenceData
 def rotation_6d_to_matrix(d6: torch.Tensor) -> torch.Tensor:
     """
     Converts 6D rotation representation by Zhou et al. [1] to rotation matrix
@@ -444,7 +442,8 @@ def apply_transformation_human_data(points: List[torch.tensor], transformation: 
     return pc_ls
 
 
-def extract_hand_points_and_mesh(hand_tsls, hand_coeffs, side):
+def extract_hand_points_and_mesh_manopth(hand_tsls, hand_coeffs, side):
+    from manopth.manolayer import ManoLayer
     if side == 0:
         mano_layer = ManoLayer(center_idx=0, side='left', use_pca=False).cuda()
     else:
@@ -457,6 +456,24 @@ def extract_hand_points_and_mesh(hand_tsls, hand_coeffs, side):
     hand_joints += hand_tsls.cpu().numpy()[...,None,:]
 
     return hand_joints, hand_verts
+
+def extract_hand_points_and_mesh_manotorch(hand_tsls, hand_coeffs, side):
+    from manotorch.manolayer import ManoLayer
+    if side == 0:
+        mano_layer = ManoLayer(center_idx=0, side='left', use_pca=False).cuda()
+    else:
+        mano_layer = ManoLayer(center_idx=0, side='right', use_pca=False).cuda()
+
+
+    output = mano_layer(quaternion_to_axis_angle(hand_coeffs.to('cuda')).reshape(-1, 48)) # manopth use axis_angle and should be (B, 48)
+    hand_verts, hand_joints = output.verts, output.joints
+    hand_joints = hand_joints.cpu().numpy()
+    hand_verts = hand_verts.cpu().numpy()
+    hand_joints += hand_tsls.cpu().numpy()[...,None,:]
+
+    return hand_joints, hand_verts
+
+extract_hand_points_and_mesh = extract_hand_points_and_mesh_manotorch
 
 def compute_hand_geometry(hand_pose_frame, mano_layer):
     # pose parameters all zero, no hand is detected
