@@ -15,7 +15,7 @@ from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate
 from pytorch3d.transforms import matrix_to_axis_angle, axis_angle_to_matrix, quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
 
 
-WMQ_IS_USING = True
+WMQ_IS_USING = False
 
 if WMQ_IS_USING:
 
@@ -158,7 +158,21 @@ class BaseDatasetProcessor(ABC):
         self.seq_save_path = f'{save_path}/seq_{seq_data_name}_{task_interval}.p'
         self.renderer = MeshRenderer3D()
         self.renderer.load_featurizer(ftype='sd_dinov2')
-        self.manolayer = ManoLayer(rot_mode='quat', side='right', use_pca=False).cuda()
+        self.manolayer_left = ManoLayer(center_idx=0, side='left', use_pca=False, rot_mode='quat').cuda()
+        self.manolayer_right = ManoLayer(center_idx=0, side='right', use_pca=False, rot_mode='quat').cuda()
+
+        self.texture_prompts = [
+            "a [object] covered in knitted wool texture, studio lighting, high detail",
+            "a [object] made of smooth polished marble, studio lighting, high detail",
+            "a [object] coated in cracked dry clay, studio lighting, high detail",
+            "a [object] wrapped in glossy plastic foil, studio lighting, high detail",
+            "a [object] textured with brushed metal surface, studio lighting, high detail",
+            "a [object] covered in colorful mosaic tiles, studio lighting, high detail",
+            "a [object] made of translucent frosted glass, studio lighting, high detail",
+            "a [object] covered in moss and natural textures, studio lighting, high detail",
+            "a [object] wrapped in denim fabric, studio lighting, high detail",
+            "a [object] coated in shiny glazed ceramic, studio lighting, high detail"
+        ]
 
     @staticmethod
     def orientation_to_elev_azim(orientation: np.ndarray) -> tuple:
@@ -308,6 +322,39 @@ class BaseDatasetProcessor(ABC):
         }
         return data_dict_m
 
+    @staticmethod
+    def optimize_hand_joints(hand_thetas:torch.Tensor, hand_trans:torch.Tensor, goal_joints:torch.Tensor, 
+                         mano_layer_quat:ManoLayer, step:int=150) -> torch.Tensor:
+        """Fit a random beta MANO with zero beta MANO via optimization.
+
+        Args:
+            hand_thetas (torch.Tensor): (T, 16, 4)
+            hand_trans (torch.Tensor): (T, 3)
+            goal_joints (torch.Tensor): (T, 21, 3)
+            mano_layer_right_quat (ManoLayer): MANO layer with quaternion rotation
+            step (int, optional): Number of optimization steps. Defaults to 150.
+        
+        Returns:
+            torch.Tensor: Optimized hand thetas (T, 16, 4)
+            torch.Tensor: Optimized hand trans (T, 3)
+        """
+        hand_thetas = hand_thetas.requires_grad_()
+        hand_trans = hand_trans.requires_grad_()
+        beta = torch.zeros(hand_thetas.shape[0], 10).to(hand_thetas.device)
+        hand_optimizer = torch.optim.Adam([hand_thetas, hand_trans], lr=0.05, weight_decay=0)
+        for ii in range(step):
+            hand_optimizer.zero_grad()
+            hand_dict = mano_layer_quat(hand_thetas, beta)
+            joints = hand_dict.joints + hand_trans[:, None, :]
+            loss = torch.nn.functional.huber_loss(joints[..., 1:, :], 
+                                                    goal_joints[..., 1:, :], 
+                                                    reduction='sum')
+            loss.backward()
+            hand_optimizer.step()
+        hand_dict = mano_layer_quat(hand_thetas, beta)
+        joints = hand_dict.joints + hand_trans[:, None, :]
+        return hand_thetas.detach(), hand_trans.detach(), joints.detach()
+
     @abstractmethod
     def _setup_paths(self):
         """Setup dataset-specific paths."""
@@ -366,14 +413,8 @@ class BaseDatasetProcessor(ABC):
         yup2xup = torch.eye(4).to('cuda')
         
         # Process hand data
-        hand_tsl, hand_coeffs = self._get_hand_info(raw_data, side, frame_indices, pre_trans=yup2xup, device='cuda')
+        hand_tsl, hand_coeffs, hand_joints = self._get_hand_info(raw_data, side, frame_indices, pre_trans=yup2xup, device='cuda')
         if hand_tsl is None: return None
-        # hand_dict = self.manolayer(hand_coeffs.reshape(-1, 16, 4), torch.zeros((hand_coeffs.shape[0], 10), device=hand_coeffs.device))
-        # hand_joints = hand_dict.joints + hand_tsl[:, None, :3]  # T X 16 X 3
-
-        from utils.tools import extract_hand_points_and_mesh
-        hand_joints = extract_hand_points_and_mesh(hand_tsl, hand_coeffs, 0 if side == 'l' else 1)[0]
-        hand_joints = torch.from_numpy(hand_joints).to('cuda')  # Convert to torch tensor and move to GPU
         
         # Load object data
         obj_transf_ls, object_name_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices, pre_trans=yup2xup, device='cuda')
@@ -401,9 +442,10 @@ class BaseDatasetProcessor(ABC):
             ]
             R_w2v, T_w2v = self.renderer.setup_cameras(camera_params, auto_distance=True)
             self.renderer.render_views(image_size=256, lighting_type='ambient')
-            texture_prompts = ["a wooden shovel, high quality", "a metal shovel, high quality"]
-            self.renderer.augment_textures(texture_prompts, num_variations=1, save_dir="test_res")
-            self.renderer.extract_features(prompt="a shovel", w_aug_texture=True)
+            object_name = raw_data['obj_real_name']
+            augmented_prompts = [p.replace("[object]", object_name) for p in self.texture_prompts]
+            self.renderer.augment_textures(augmented_prompts, save_dir="test_res")
+            self.renderer.extract_features(prompt=f"a {object_name}", w_aug_texture=True)
             rgbs, depths, masks, points_ls, features = self.renderer.get_rendered_data() # features: (num_views, num_texture, feature_dim, height, width)
             all_points_dff, all_features_dff = get_multiview_dff(points_ls, masks, features,
                                                     n_points=1000) 
@@ -429,36 +471,19 @@ class BaseDatasetProcessor(ABC):
             contact_indices_ls.append(contact_indices)
         contact_indices = torch.cat(contact_indices_ls, dim=-1)
         ### render & feature & contact points
-
-        #### DEBUG CODE
-        w2c = torch.eye(4).unsqueeze(0)
-        w2c[..., :3, :3] = R_w2v.cpu()
-        w2c[..., :3, 3] = T_w2v.cpu()
-        c2w = torch.inverse(w2c)
-        # self.renderer.visualize_all_views()
-        ### check the camera pose
-        vis_pc_coor_plotly([object_points_ls[0].cpu().numpy(), orientation.reshape(1, 3)], 
-                           gt_hand_joints=hand_inv_joints[0].cpu().numpy(),
-                           transformation_ls=c2w, show_axis=True)   
-        ### check the object & hand pose $ contact points
-        contact_indices_expanded = contact_indices.unsqueeze(-1).expand(-1, -1, 3)  # [131, 100, 3]
-        result = torch.gather(obj_points_trans_ori, dim=1, index=contact_indices_expanded)
-        idx = 30
-        vis_pc_coor_plotly([obj_points_trans_ori[idx].cpu().numpy(), result[idx].cpu().numpy()], 
-                           gt_hand_joints=hand_joints[idx].cpu().numpy(), filename=f"dataset/vis_results/{raw_data['which_dataset']}_{raw_data['which_sequence']}_{side}_{idx}",
-                           show_axis=True)     
-        #### DEBUG CODE
         
         ### Return KEYS
-        ### TODO Sanity Check
+        if end_idx - start_idx <= 30:
+            logging.warning(f"Sequence {raw_data['which_sequence']} on side {side} has too few frames: {end_idx - start_idx}. Skipping.")
+            return None
         r_side = 'l' if side == 'r' else 'r'
         hand_thetas_rot6d = matrix_to_rotation_6d(quaternion_to_matrix(hand_coeffs))
         sequence_data = {
-            f'{side}h_joints': hand_joints.cpu(), # (T, 21, 3)
-            f'{side}o_transf': obj_transf_ls[0].cpu(), # [(T, 4, 4), ...]
+            f'{side}h_joints': hand_joints.cpu()[start_idx:end_idx], # (T, 21, 3)
+            f'{side}o_transf': obj_transf_ls[0][start_idx:end_idx].cpu(), # [(T, 4, 4), ...]
             f'{side}o_points': object_points_ls[0].cpu(), # [(N_points, 3), ...]
             f'{side}o_features': object_features_ls[0].cpu(), # [(N_textures, N_points, d), ...]
-            f'{side}h_params': torch.cat([hand_thetas_rot6d.flatten(-2, -1), hand_tsl], dim=-1).cpu(), # (T, 99)
+            f'{side}h_params': torch.cat([hand_thetas_rot6d.flatten(-2, -1), hand_tsl], dim=-1).cpu()[start_idx:end_idx], # (T, 99)
             f'{side}o_normals': None,  # Placeholder for normals if not available
 
             f'{r_side}h_joints': None,
@@ -468,7 +493,7 @@ class BaseDatasetProcessor(ABC):
             f'{r_side}h_params': None,
             f'{r_side}o_normals': None,  # Placeholder for normals if not available
 
-            'contact_indices': contact_indices.cpu(),
+            'contact_indices': contact_indices.cpu()[start_idx:end_idx],
             'mesh_path': object_mesh_path_ls,
             'side': 1 if side == 'r' else 0,  # 1 for right, 0 for left
             'task_desc': self._get_task_description(raw_data),
@@ -478,6 +503,26 @@ class BaseDatasetProcessor(ABC):
         }
         if side == 'l':
             sequence_data = self.mirror_data(sequence_data, side)
+        
+        #### DEBUG CODE
+        # w2c = torch.eye(4).unsqueeze(0)
+        # w2c[..., :3, :3] = R_w2v.cpu()
+        # w2c[..., :3, 3] = T_w2v.cpu()
+        # c2w = torch.inverse(w2c)
+        # # self.renderer.visualize_all_views()
+        # ### check the camera pose
+        # vis_pc_coor_plotly([object_points_ls[0].cpu().numpy(), orientation.reshape(1, 3)], 
+        #                    gt_hand_joints=hand_inv_joints[0].cpu().numpy(),
+        #                    transformation_ls=c2w, show_axis=True)   
+        # ### check the object & hand pose $ contact points
+        # contact_indices_expanded = sequence_data['contact_indices'].unsqueeze(-1).expand(-1, -1, 3)  # [T, 100, 3]
+        # obj_points_trans_ori = apply_transformation_pt(sequence_data[f'ro_points'], sequence_data[f'ro_transf'])
+        # result = torch.gather(obj_points_trans_ori, dim=1, index=contact_indices_expanded)
+        # idx = 30
+        # vis_pc_coor_plotly([obj_points_trans_ori[idx].cpu().numpy(), result[idx].cpu().numpy()], 
+        #                    gt_hand_joints=sequence_data[f'rh_joints'][idx].cpu().numpy(),
+        #                    show_axis=True)
+        # #### DEBUG CODE
 
         return sequence_data
         
@@ -513,7 +558,7 @@ class BaseDatasetProcessor(ABC):
                 for side in ['l', 'r']:
                     if seq_data.get(f'{side}_valid', True):  # Check if this side has valid data
                         processed_seq = self.process_sequence(seq_data, side)
-                        if processed_seq is not None: whole_data_ls.append(processed_seq)
+                        if processed_seq is not None: whole_data_ls.append(copy.deepcopy(processed_seq))
                     
         
         logging.info(f"Processed {len(whole_data_ls)} sequences, {bad_seq_num} failed")
