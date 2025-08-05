@@ -380,8 +380,10 @@ class TACOProcessor(BaseDatasetProcessor):
         # Load hand poses
         if side == 'r':
             hand_pkl = pickle.load(open(os.path.join(hand_pose_dir, "right_hand.pkl"), "rb"))
+            hand_beta = pickle.load(open(os.path.join(hand_pose_dir, "right_hand_shape.pkl"), "rb"))["hand_shape"].reshape(10).detach().to(device)
         else:
             hand_pkl = pickle.load(open(os.path.join(hand_pose_dir, "left_hand.pkl"), "rb"))
+            hand_beta = pickle.load(open(os.path.join(hand_pose_dir, "left_hand_shape.pkl"), "rb"))["hand_shape"].reshape(10).detach().to(device)
         
         # Extract poses and translations
         hand_theta_list = []
@@ -404,8 +406,17 @@ class TACOProcessor(BaseDatasetProcessor):
         hand_transform[:, :3, 3] = hand_trans_raw
         hand_thetas_raw[:, 0] = matrix_to_quaternion(hand_transform[:, :3, :3])
         hand_trans_raw = hand_transform[:, :3, 3]
-        
-        return hand_trans_raw[frame_indices], hand_thetas_raw[frame_indices]
+
+        if side == 'r':
+            output = self.manolayer_right(hand_thetas_raw, hand_beta.unsqueeze(0).repeat(hand_thetas_raw.shape[0], 1))
+            hand_joints = output.joints + hand_trans_raw[...,None,:]
+            hand_thetas, hand_trans, hand_joints = self.optimize_hand_joints(hand_thetas_raw, hand_trans_raw, hand_joints, self.manolayer_right)
+        else:
+            output = self.manolayer_left(hand_thetas_raw, hand_beta.unsqueeze(0).repeat(hand_thetas_raw.shape[0], 1))
+            hand_joints = output.joints + hand_trans_raw[...,None,:]
+            hand_thetas, hand_trans, hand_joints = self.optimize_hand_joints(hand_thetas_raw, hand_trans_raw, hand_joints, self.manolayer_left)
+
+        return hand_trans[frame_indices], hand_thetas[frame_indices], hand_joints[frame_indices]
     
 
     def _get_object_info(self, raw_data: Dict[str, Any], frame_indices: List[int], pre_trans:torch.Tensor=None, device = torch.device('cuda')) -> Tuple[List[torch.Tensor], List[str]]:
@@ -566,7 +577,7 @@ DATASET_CONFIGS = {
         'task_interval': 1,
         'which_dataset': 'Taco',
         'seq_data_name': 'feature',
-        'sequence_indices': list([30,40,50])  # Example sequence indices for processing
+        'sequence_indices': None  # Example sequence indices for processing
     },
 
     'dexycb': {
@@ -772,8 +783,8 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
 
 if __name__ == "__main__":
 
-    dataset_names = ['dexycb',  'oakinkv2']
-    # dataset_names = ['taco']
+    # dataset_names = ['dexycb',  'oakinkv2']
+    dataset_names = ['taco']
     processed_data = []
     
     GENERATE = True
