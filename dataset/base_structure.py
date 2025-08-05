@@ -11,11 +11,11 @@ from data_process.mesh_renderer import MeshRenderer3D
 from data_process.vis_utils import visualize_pointclouds_and_mesh, get_multiview_dff, extract_pca, test_pca_matching
 from manotorch.manolayer import ManoLayer
 from utils.vis_utils import vis_pc_coor_plotly
-from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate_feature, get_contact_pts, find_longest_false_substring, from_hand_rot6d, to_hand_rot6d
+from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate_feature, get_contact_pts, find_longest_false_substring, from_hand_rot6d, to_hand_rot6d, matrix_to_rotation_6d
 from pytorch3d.transforms import matrix_to_axis_angle, axis_angle_to_matrix, quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
 
 
-WMQ_IS_USING = True
+WMQ_IS_USING = False
 
 if WMQ_IS_USING:
 
@@ -183,7 +183,9 @@ class BaseDatasetProcessor(ABC):
 
     @staticmethod
     def mirror_data(data_dict, side):
-        ### TODO
+        if data_dict[f'{side}o_transf'] is None:
+            raise ValueError(f"Object transformation data for side '{side}' is None.")
+
         if type(data_dict[f'{side}o_transf']) is list:
             obj_transf_list_m = []
             for obj_transf in data_dict[f'{side}o_transf']:
@@ -226,7 +228,7 @@ class BaseDatasetProcessor(ABC):
             
             obj_features_list_m = [obj_features.clone() for obj_features in data_dict[f'{side}o_features']]
         else:
-            obj_transf = data_dict[f'{side}o_transf']
+            obj_transf = data_dict[f'{side}o_transf'] # (T, 4, 4)
             transl_m = obj_transf[:, :3, 3].clone()
             rot_m = obj_transf[:, :3, :3].clone()
 
@@ -244,9 +246,12 @@ class BaseDatasetProcessor(ABC):
             obj_points_m[..., 0] *= -1
             obj_points_list_m = obj_points_m
 
-            obj_normals_m = data_dict[f'{side}o_normals'].clone()
-            obj_normals_m[..., 0] *= -1
-            obj_normals_list_m = obj_normals_m
+            if data_dict[f'{side}o_normals'] is None:
+                obj_normals_list_m = None
+            else:
+                obj_normals_m = data_dict[f'{side}o_normals'].clone()
+                obj_normals_m[..., 0] *= -1
+                obj_normals_list_m = obj_normals_m
 
         ### hand
         hand_joints_m = data_dict[f'{side}h_joints'].clone()
@@ -273,7 +278,13 @@ class BaseDatasetProcessor(ABC):
             f'{side}o_normals': None,
             f'{side}h_params': None,
             'contact_indices': copy.deepcopy(data_dict['contact_indices']),
+            
             'mesh_path': copy.deepcopy(data_dict['mesh_path']),
+            'side': 1 if side_m == 'r' else 0, 
+            'task_desc': copy.deepcopy(data_dict['task_desc']),
+            'seq_len': data_dict['seq_len'],
+            'which_dataset': data_dict['which_dataset'],
+            'which_sequence': data_dict['which_sequence'],
         }
         return data_dict_m
 
@@ -293,7 +304,7 @@ class BaseDatasetProcessor(ABC):
         pass
     
     @abstractmethod
-    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int], pre_trans:torch.Tensor=None, device = torch.device('cuda')) -> Tuple[torch.Tensor, torch.Tensor]:
         """Process hand data to get joints and parameters."""
         pass
     
@@ -331,26 +342,25 @@ class BaseDatasetProcessor(ABC):
         if not frame_indices: return None
         
         # Apply coordinate transformation
-        yup2xup = self._apply_coordinate_transform(side).to('cuda')
+        # yup2xup = self._apply_coordinate_transform(side).to('cuda')
+        yup2xup = torch.eye(4).to('cuda')
         
         # Process hand data
-        hand_tsl, hand_coeffs = self._get_hand_info(raw_data, side, frame_indices)
+        hand_tsl, hand_coeffs = self._get_hand_info(raw_data, side, frame_indices, pre_trans=yup2xup, device='cuda')
         if hand_tsl is None: return None
         hand_dict = self.manolayer(hand_coeffs.reshape(-1, 16, 4), torch.zeros((hand_coeffs.shape[0], 10), device=hand_coeffs.device))
         hand_joints = hand_dict.joints + hand_tsl[:, None, :3]  # T X 16 X 3
         
         # Load object data
-        object_transf_ls_raw, object_name_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices)
-        if object_transf_ls_raw is None: return None
-        obj_transf_ls = [yup2xup @ torch.from_numpy(obj_transf).float().to('cuda') 
-                        if isinstance(obj_transf, np.ndarray) else yup2xup @ obj_transf.to('cuda') 
-                        for obj_transf in object_transf_ls_raw]
+        obj_transf_ls, object_name_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices, pre_trans=yup2xup, device='cuda')
+        if obj_transf_ls is None: return None
 
         ### render & feature & contact points
         object_points_ls = []
         object_features_ls = []
         contact_indices_ls = []
         start_idx, end_idx = 1e10, 0
+        
         ### get camera orientation
         render_at_tidx = 0
         obj_inv_transf = torch.inverse(obj_transf_ls[0]).to(hand_joints.device)
@@ -358,6 +368,7 @@ class BaseDatasetProcessor(ABC):
         orientation = hand_inv_joints[render_at_tidx, 0].cpu().numpy()
         orientation[2] += 0.15
         ### get camera orientation
+        
         for obj_part_idx, object_mesh_path in enumerate(object_mesh_path_ls):
             self.renderer.load_mesh(object_mesh_path, scale=0.01)
             elev, azim = self.orientation_to_elev_azim(orientation)
@@ -369,10 +380,9 @@ class BaseDatasetProcessor(ABC):
             texture_prompts = ["a wooden shovel, high quality", "a metal shovel, high quality"]
             self.renderer.augment_textures(texture_prompts, num_variations=1, save_dir="test_res")
             self.renderer.extract_features(prompt="a shovel", w_aug_texture=True)
-            rgbs, depths, masks, points_ls, features = self.renderer.get_rendered_data()
-            # features: (num_views, num_texture, feature_dim, height, width)
+            rgbs, depths, masks, points_ls, features = self.renderer.get_rendered_data() # features: (num_views, num_texture, feature_dim, height, width)
             all_points_dff, all_features_dff = get_multiview_dff(points_ls, masks, features,
-                                                    n_points=1000)
+                                                    n_points=1000) 
             
             ### get contact point indices
             obj_points_trans_ori = apply_transformation_pt(all_points_dff, obj_transf_ls[obj_part_idx])
@@ -396,42 +406,73 @@ class BaseDatasetProcessor(ABC):
         contact_indices = torch.cat(contact_indices_ls, dim=-1)
         ### render & feature & contact points
 
-        # #### DEBUG CODE
-        # w2c = torch.eye(4).unsqueeze(0)
-        # w2c[..., :3, :3] = R_w2v.cpu()
-        # w2c[..., :3, 3] = T_w2v.cpu()
-        # c2w = torch.inverse(w2c)
-        # # self.renderer.visualize_all_views()
-        # vis_pc_coor_plotly([object_points_ls[0].cpu().numpy(), orientation.reshape(1, 3)], 
-        #                    gt_hand_joints=hand_inv_joints[0].cpu().numpy(),
-        #                    transformation_ls=c2w, show_axis=True)       
-        # #### DEBUG CODE
+        #### DEBUG CODE
+        w2c = torch.eye(4).unsqueeze(0)
+        w2c[..., :3, :3] = R_w2v.cpu()
+        w2c[..., :3, 3] = T_w2v.cpu()
+        c2w = torch.inverse(w2c)
+        # self.renderer.visualize_all_views()
+        ### check the camera pose
+        vis_pc_coor_plotly([object_points_ls[0].cpu().numpy(), orientation.reshape(1, 3)], 
+                           gt_hand_joints=hand_inv_joints[0].cpu().numpy(),
+                           transformation_ls=c2w, show_axis=True)   
+        ### check the object & hand pose $ contact points
+        contact_indices_expanded = contact_indices.unsqueeze(-1).expand(-1, -1, 3)  # [131, 100, 3]
+        result = torch.gather(obj_points_trans_ori, dim=1, index=contact_indices_expanded)
+        idx = 30
+        vis_pc_coor_plotly([obj_points_trans_ori[idx].cpu().numpy(), result[idx].cpu().numpy()], 
+                           gt_hand_joints=hand_joints[idx].cpu().numpy(),
+                           show_axis=True)     
+        #### DEBUG CODE
         
         ### Return KEYS
-        ### TODO self.mirror_data
-        ### TODO DICT return 
         ### TODO Sanity Check
-        # DICT with keys: ['rh_joints', 'ro_transf', 'ro_points', 'ro_normals', 'rh_params', 
-        #  'lh_joints', 'lo_transf', 'lo_points', 'lo_normals', 'lh_params', 
-        #  'contact_indices', 'mesh_path', 'side', 'task_desc', 'seq_len']
-        sequence_data = HumanSequenceData(
-            hand_tsls=hand_tsl.cpu(),
-            hand_coeffs=hand_coeffs.cpu(),
-            side=1 if side == 'r' else 0,
-            obj_poses=torch.stack(obj_transf_ls).cpu(),
-            object_names=object_name_ls,
-            object_mesh_path=object_mesh_path_ls,
-            object_points_ls = object_points_ls,
-            object_features_ls = object_features_ls,
-            
-            frame_indices=frame_indices,
-            which_dataset=raw_data['which_dataset'],
-            which_sequence=raw_data['which_sequence'],
-            task_description=self._get_task_description(raw_data),
-            extra_info=raw_data.get('extra_info', {}),
-        )
-        
+        r_side = 'l' if side == 'r' else 'r'
+        hand_thetas_rot6d = matrix_to_rotation_6d(quaternion_to_matrix(hand_coeffs))
+        sequence_data = {
+            f'{side}h_joints': hand_joints.cpu(), # (T, 21, 3)
+            f'{side}o_transf': obj_transf_ls[0].cpu(), # [(T, 4, 4), ...]
+            f'{side}o_points': object_points_ls[0].cpu(), # [(N_points, 3), ...]
+            f'{side}o_features': object_features_ls[0].cpu(), # [(N_textures, N_points, d), ...]
+            f'{side}h_params': torch.cat([hand_thetas_rot6d.flatten(-2, -1), hand_tsl], dim=-1).cpu(), # (T, 99)
+            f'{side}o_normals': None,  # Placeholder for normals if not available
+
+            f'{r_side}h_joints': None,
+            f'{r_side}o_transf': None,
+            f'{r_side}o_points': None,
+            f'{r_side}o_features': None,
+            f'{r_side}h_params': None,
+            f'{r_side}o_normals': None,  # Placeholder for normals if not available
+
+            'contact_indices': contact_indices.cpu(),
+            'mesh_path': object_mesh_path_ls,
+            'side': 1 if side == 'r' else 0,  # 1 for right, 0 for left
+            'task_desc': self._get_task_description(raw_data),
+            'seq_len': len(frame_indices),
+            'which_dataset': raw_data['which_dataset'],
+            'which_sequence': raw_data['which_sequence'],
+        }
+        if side == 'l':
+            sequence_data = self.mirror_data(sequence_data, side)
+
         return sequence_data
+        
+        # sequence_data = HumanSequenceData(
+        #     hand_tsls=hand_tsl.cpu(),
+        #     hand_coeffs=hand_coeffs.cpu(),
+        #     side=1 if side == 'r' else 0,
+        #     obj_poses=torch.stack(obj_transf_ls).cpu(),
+        #     object_names=object_name_ls,
+        #     object_mesh_path=object_mesh_path_ls,
+        #     object_points_ls = object_points_ls,
+        #     object_features_ls = object_features_ls,
+            
+        #     frame_indices=frame_indices,
+        #     which_dataset=raw_data['which_dataset'],
+        #     which_sequence=raw_data['which_sequence'],
+        #     task_description=self._get_task_description(raw_data),
+        #     extra_info=raw_data.get('extra_info', {}),
+        # )
 
     def process_all_sequences(self, sequence_indices: List[int]) -> List[Dict[str, Any]]:
 

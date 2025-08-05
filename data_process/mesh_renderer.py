@@ -183,11 +183,6 @@ class MeshRenderer3D:
         else:
             # Add default vertex colors if no textures are available
             self._add_default_vertex_colors(verts)
-        
-        # # Normalize mesh to unit sphere for better rendering
-        # self._normalize_mesh()
-        
-        # print(f"Loaded mesh with {len(verts)} vertices and {len(mesh_faces)} faces")
 
     def _calculate_optimal_camera_distance(self, fov: float = 60.0, coverage_ratio: float = 0.8) -> float:
         """
