@@ -18,7 +18,6 @@ from pytorch3d.transforms import (
     quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion, quaternion_to_axis_angle
 )
 from pytransform3d import transformations as pt
-# from manopth.manolayer import ManoLayer
 from manotorch.manolayer import ManoLayer
 
 from .base_structure import BaseDatasetProcessor, DatasetRegistry, HumanSequenceData, ORIGIN_DATA_PATH, HUMAN_SEQ_PATH
@@ -219,7 +218,7 @@ class OAKINKv2Processor(BaseDatasetProcessor):
         """Apply transformation to points."""
         return apply_transformation_pt(points, transform)
 
-    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int], pre_trans: torch.Tensor = None, device = torch.device('cuda')) -> Tuple[torch.Tensor, torch.Tensor]:
         """Process OAKINKv2 hand data."""
         
         h_coeffs, h_tsl, h_betas = self._extract_hand_coeffs(raw_data, side, frame_indices)
@@ -232,8 +231,8 @@ class OAKINKv2Processor(BaseDatasetProcessor):
         hand_transformation[:, :3, :3] = quaternion_to_matrix(hand_rotation_quat)
         h_coeffs[:, 0] = matrix_to_quaternion(yup2xup[:3, :3] @ hand_transformation[:, :3, :3])
         h_tsl = self._apply_transformation_pt(h_tsl, yup2xup)
-        
-        return h_tsl, h_coeffs
+
+        return h_tsl.squeeze(), h_coeffs
 
     def _get_object_info(self, raw_data: Dict[str, Any], frame_indices: List[int]) -> Tuple[List[torch.Tensor], List[str]]:
         """Load OAKINKv2 object data."""
@@ -398,15 +397,11 @@ class TACOProcessor(BaseDatasetProcessor):
         hand_thetas_raw = torch.from_numpy(np.float32(hand_theta_list)).to(device)
         hand_trans_raw = torch.from_numpy(np.float32(hand_trans_list)).to(device)
         
-        if pre_trans is None:
-            pre_trans = torch.eye(4).to(device)
-
         # Convert to quaternions
         hand_thetas_raw = axis_angle_to_quaternion(hand_thetas_raw.reshape(hand_thetas_raw.shape[0], 16, 3))
         hand_transform = torch.eye(4).to(device).unsqueeze(0).repeat((hand_thetas_raw.shape[0], 1, 1))
         hand_transform[:, :3, :3] = quaternion_to_matrix(hand_thetas_raw[:, 0])
         hand_transform[:, :3, 3] = hand_trans_raw
-        hand_transform = pre_trans @ hand_transform
         hand_thetas_raw[:, 0] = matrix_to_quaternion(hand_transform[:, :3, :3])
         hand_trans_raw = hand_transform[:, :3, 3]
         
@@ -478,13 +473,14 @@ class DexYCBProcessor(BaseDatasetProcessor):
                 'l_valid': False,
                 'r_valid': True
             }]
-    
-    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+
+    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int], pre_trans: torch.Tensor = None, device = torch.device('cuda')) -> Tuple[torch.Tensor, torch.Tensor]:
         """Get hand tsl and coeffs information."""
         hand_pose_frame = raw_data['hand_pose'][frame_indices]
         p = torch.from_numpy(hand_pose_frame[..., : 48].astype(np.float32))
 
-        xx = ManoLayer(
+        from manopth.manolayer import ManoLayer as _ManoLayer
+        xx = _ManoLayer(
             flat_hand_mean=False,
             ncomps=45,
             side="left" if side == 'l' else 'right',
@@ -560,7 +556,7 @@ DATASET_CONFIGS = {
         'task_interval': 20,
         'which_dataset': 'Oakinkv2',
         'seq_data_name': 'feature',
-        'sequence_indices': list(range(0, 5))  # Example sequence indices for processing
+        'sequence_indices': list([20,30,40,50])  # Example sequence indices for processing
     },
     
     'taco': {
@@ -570,7 +566,7 @@ DATASET_CONFIGS = {
         'task_interval': 1,
         'which_dataset': 'Taco',
         'seq_data_name': 'feature',
-        'sequence_indices': list(range(0, 10))  # Example sequence indices for processing
+        'sequence_indices': list([30,40,50])  # Example sequence indices for processing
     },
 
     'dexycb': {
@@ -580,7 +576,7 @@ DATASET_CONFIGS = {
         'task_interval': 1,
         'which_dataset': 'DexYCB',
         'seq_data_name': 'feature',
-        'sequence_indices': list(range(0, 3))  # Example sequence indices for
+        'sequence_indices': list([20,30,40,50])  # Example sequence indices for 
     }
 }
 
@@ -768,15 +764,16 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
     for dataset_name, data_list in dataset_data.items():
         print(f"Dataset {dataset_name} has {len(data_list)} sequences")
         # Sample a few sequences for visualization
-        sampled_data = random.sample(data_list, 2)
+        # sampled_data = random.sample(data_list, 2)
+        sampled_data = data_list
         for d in sampled_data:
             print(f"Visualizing sequence {d.which_sequence}")
             visualize_human_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/dataset/vis_results/{d.which_dataset}_{d.which_sequence}.html')
 
 if __name__ == "__main__":
 
-    # dataset_names = ['dexycb', 'taco', 'oakinkv2']
-    dataset_names = ['taco']
+    dataset_names = ['dexycb',  'oakinkv2']
+    # dataset_names = ['taco']
     processed_data = []
     
     GENERATE = True
@@ -791,4 +788,4 @@ if __name__ == "__main__":
 
     # show_human_statistics(processed_data)
     
-    check_data_correctness_by_vis(processed_data)
+    # check_data_correctness_by_vis(processed_data)

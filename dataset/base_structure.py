@@ -15,26 +15,46 @@ from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate
 from pytorch3d.transforms import matrix_to_axis_angle, axis_angle_to_matrix, quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
 
 
-WMQ_IS_USING = False
+WMQ_IS_USING = True
 
 if WMQ_IS_USING:
 
+    # ORIGIN_DATA_PATH = {
+    #     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco",
+    #     "Oakinkv2": '/home/qianxu/Desktop/New_Folder/OakInk2/OakInk-v2-hub',
+    #     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
+    # }
+
+    # HUMAN_SEQ_PATH = {
+    #     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/human_save",
+    #     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/human_save",
+    #     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data/human_save'
+    # }
+
+    # DEX_SEQ_PATH = {
+    #     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/dex_save",
+    #     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/dex_save",
+    #     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
+    # }
+
+    data_root = '/home/qianxu/Desktop/Project/DexPose/data'
+
     ORIGIN_DATA_PATH = {
-        "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco",
-        "Oakinkv2": '/home/qianxu/Desktop/New_Folder/OakInk2/OakInk-v2-hub',
-        'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
+        "Taco": os.path.join(data_root, "Taco"),
+        "Oakinkv2": os.path.join(data_root, "Oakinkv2"),
+        'DexYCB': os.path.join(data_root, 'DexYCB')
     }
 
     HUMAN_SEQ_PATH = {
-        "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/human_save",
-        "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/human_save",
-        'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data/human_save'
+        "Taco": os.path.join(data_root, "Taco", "human_save"),
+        "Oakinkv2": os.path.join(data_root, "Oakinkv2", "human_save"),
+        'DexYCB': os.path.join(data_root, 'DexYCB', 'human_save')
     }
 
     DEX_SEQ_PATH = {
-        "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/dex_save",
-        "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/dex_save",
-        'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
+        "Taco": os.path.join(data_root, "Taco", "dex_save"),
+        "Oakinkv2": os.path.join(data_root, "Oakinkv2", "dex_save"),
+        'DexYCB': os.path.join(data_root, 'DexYCB', 'dex_save')
     }
 
 else:
@@ -348,8 +368,12 @@ class BaseDatasetProcessor(ABC):
         # Process hand data
         hand_tsl, hand_coeffs = self._get_hand_info(raw_data, side, frame_indices, pre_trans=yup2xup, device='cuda')
         if hand_tsl is None: return None
-        hand_dict = self.manolayer(hand_coeffs.reshape(-1, 16, 4), torch.zeros((hand_coeffs.shape[0], 10), device=hand_coeffs.device))
-        hand_joints = hand_dict.joints + hand_tsl[:, None, :3]  # T X 16 X 3
+        # hand_dict = self.manolayer(hand_coeffs.reshape(-1, 16, 4), torch.zeros((hand_coeffs.shape[0], 10), device=hand_coeffs.device))
+        # hand_joints = hand_dict.joints + hand_tsl[:, None, :3]  # T X 16 X 3
+
+        from utils.tools import extract_hand_points_and_mesh
+        hand_joints = extract_hand_points_and_mesh(hand_tsl, hand_coeffs, 0 if side == 'l' else 1)[0]
+        hand_joints = torch.from_numpy(hand_joints).to('cuda')  # Convert to torch tensor and move to GPU
         
         # Load object data
         obj_transf_ls, object_name_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices, pre_trans=yup2xup, device='cuda')
@@ -421,7 +445,7 @@ class BaseDatasetProcessor(ABC):
         result = torch.gather(obj_points_trans_ori, dim=1, index=contact_indices_expanded)
         idx = 30
         vis_pc_coor_plotly([obj_points_trans_ori[idx].cpu().numpy(), result[idx].cpu().numpy()], 
-                           gt_hand_joints=hand_joints[idx].cpu().numpy(),
+                           gt_hand_joints=hand_joints[idx].cpu().numpy(), filename=f"dataset/vis_results/{raw_data['which_dataset']}_{raw_data['which_sequence']}_{side}_{idx}",
                            show_axis=True)     
         #### DEBUG CODE
         
