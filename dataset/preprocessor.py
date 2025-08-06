@@ -576,7 +576,7 @@ DATASET_CONFIGS = {
         'task_interval': 1,
         'which_dataset': 'Taco',
         'seq_data_name': 'feature',
-        'sequence_indices': list(range(120, 130))  # Example sequence indices for processing
+        'sequence_indices': None
     },
 
     'dexycb': {
@@ -784,8 +784,8 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
 
 if __name__ == "__main__":
 
-    dataset_names = ['taco', 'dexycb',  'oakinkv2']
-    # dataset_names = ['taco']
+    # dataset_names = ['taco', 'dexycb',  'oakinkv2']
+    dataset_names = ['taco']
     processed_data = []
     
     GENERATE = True
