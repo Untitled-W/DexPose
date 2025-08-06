@@ -15,7 +15,7 @@ from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate
 from pytorch3d.transforms import matrix_to_axis_angle, axis_angle_to_matrix, quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
 
 
-WMQ_IS_USING = True
+WMQ_IS_USING = False
 
 if WMQ_IS_USING:
 
@@ -450,7 +450,10 @@ class BaseDatasetProcessor(ABC):
             all_points_dff, all_features_dff = get_multiview_dff(points_ls, masks, features,
                                                     n_points=1000) 
             
-            ### get the contact timesteps
+            ### get contact point indices
+            obj_points_trans_ori = apply_transformation_pt(all_points_dff, obj_transf_ls[obj_part_idx])
+            hand_key_joints = get_key_hand_joints(hand_joints)
+            hand_key_features = intepolate_feature(hand_key_joints, all_features_dff[0], obj_points_trans_ori)
             distance = torch.norm(hand_key_joints[..., None, :] - obj_points_trans_ori[..., None, :, :], dim=-1, p=2)
             min_dis, min_dis_idx = torch.min(distance, dim=-1)
             untouch_mask = torch.min(min_dis, dim=-1)[0] > 0.02
@@ -463,12 +466,6 @@ class BaseDatasetProcessor(ABC):
             if end_idx - start_idx <= 30:
                 logging.warning(f"Sequence {raw_data['which_sequence']} on side {side} has too few frames: {end_idx - start_idx}. Skipping.")
                 return None
-            ### get the contact timesteps
-            
-            ### get contact point indices
-            obj_points_trans_ori = apply_transformation_pt(all_points_dff, obj_transf_ls[obj_part_idx])
-            hand_key_joints = get_key_hand_joints(hand_joints)
-            hand_key_features = intepolate_feature(hand_key_joints, all_features_dff[0], obj_points_trans_ori)
             contact_indices = get_contact_pts(all_points_dff, all_features_dff[0], hand_key_features, n_pts=100 // len(object_mesh_path_ls))
             ### get contact point indices
 
@@ -552,27 +549,27 @@ class BaseDatasetProcessor(ABC):
         whole_data_ls = []
         bad_seq_num = 0
         
-        # 
+        all_n = 0
+        erro_n = 0
         for idx in tqdm(sequence_indices, desc=f"Processing {self.which_dataset}-{self.seq_data_name}"):
-            if idx < 4:
-                print(f"Skipping index {idx} for debugging purposes.")
-                continue
             data_item = self.data_ls[idx]
             sequence_list = self._load_sequence_data(data_item) 
             
             for seq_data in sequence_list:
                 for side in ['l', 'r']:
                     if seq_data.get(f'{side}_valid', True):  # Check if this side has valid data
-
+                        all_n += 1
                         print(f"Processing {idx}: {seq_data['which_dataset']}-{seq_data['which_sequence']} on side {side}")
-                        try:
-                            processed_seq = self.process_sequence(seq_data, side)
-                            if processed_seq is not None: 
-                                logging.info(f"Item {len(whole_data_ls):<4}: index {idx}, {seq_data['which_dataset']}-{seq_data['which_sequence']} from side {side}, len {processed_seq['seq_len']}")
-                                whole_data_ls.append(copy.deepcopy(processed_seq))
-                        except Exception as e:
-                            logging.error(f"Error processing {idx}: {seq_data['which_dataset']}-{seq_data['which_sequence']} on side {side}: {e}")
-                            bad_seq_num += 1
+                        processed_seq = self.process_sequence(seq_data, side)
+                        if processed_seq is not None: 
+                            logging.info(f"Item {len(whole_data_ls):<4}: index {idx}, {seq_data['which_dataset']}-{seq_data['which_sequence']} from side {side}, len {processed_seq['seq_len']}")
+                            whole_data_ls.append(copy.deepcopy(processed_seq))
+                        else:
+                            erro_n += 1
+                            print("####################")
+                            print(f"Error rate: {erro_n}/{all_n} = {erro_n/all_n:.2%}")
+                            print("####################")
+
 
         
         logging.info(f"Processed {len(whole_data_ls)} sequences, {bad_seq_num} failed")

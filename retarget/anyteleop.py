@@ -146,11 +146,14 @@ def check_data_correctness_by_vis(dex_data: List[DexSequenceData]):
 
 if __name__ == "__main__":
 
-    dataset_names = ['dexycb', 'taco', 'oakinkv2']
+    dataset_names = ['taco']
     # robots = [RobotName.allegro, RobotName.shadow, RobotName.leap]
     robots = [RobotName.inspire]
+    # robot_dir = (
+    #     Path("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets").absolute() / "robots" / "hands"
+    # )
     robot_dir = (
-        Path("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets").absolute() / "robots" / "hands"
+        Path("/home/qianxu/Project25/DexPose/thirdparty/dex-retargeting/assets").absolute() / "robots" / "hands"
     )
     RetargetingConfig.set_default_urdf_dir(robot_dir)
     processed_data = []
