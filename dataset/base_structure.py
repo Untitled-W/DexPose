@@ -559,14 +559,14 @@ class BaseDatasetProcessor(ABC):
                     if seq_data.get(f'{side}_valid', True):  # Check if this side has valid data
 
                         print(f"Processing {idx}: {seq_data['which_dataset']}-{seq_data['which_sequence']} on side {side}")
-                        try:
-                            processed_seq = self.process_sequence(seq_data, side)
-                            if processed_seq is not None: 
-                                logging.info(f"Item {len(whole_data_ls):<4}: index {idx}, {seq_data['which_dataset']}-{seq_data['which_sequence']} from side {side}, len {processed_seq['seq_len']}")
-                                whole_data_ls.append(copy.deepcopy(processed_seq))
-                        except Exception as e:
-                            logging.error(f"Error processing {idx}: {seq_data['which_dataset']}-{seq_data['which_sequence']} on side {side}: {e}")
-                            bad_seq_num += 1
+                        # try:
+                        processed_seq = self.process_sequence(seq_data, side)
+                        if processed_seq is not None: 
+                            logging.info(f"Item {len(whole_data_ls):<4}: index {idx}, {seq_data['which_dataset']}-{seq_data['which_sequence']} from side {side}, len {processed_seq['seq_len']}")
+                            whole_data_ls.append(copy.deepcopy(processed_seq))
+                        # except Exception as e:
+                        #     logging.error(f"Error processing {idx}: {seq_data['which_dataset']}-{seq_data['which_sequence']} on side {side}: {e}")
+                        #     bad_seq_num += 1
 
         
         logging.info(f"Processed {len(whole_data_ls)} sequences, {bad_seq_num} failed")
