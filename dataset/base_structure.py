@@ -450,13 +450,6 @@ class BaseDatasetProcessor(ABC):
             all_points_dff, all_features_dff = get_multiview_dff(points_ls, masks, features,
                                                     n_points=1000) 
             
-            ### get contact point indices
-            obj_points_trans_ori = apply_transformation_pt(all_points_dff, obj_transf_ls[obj_part_idx])
-            hand_key_joints = get_key_hand_joints(hand_joints)
-            hand_key_features = intepolate_feature(hand_key_joints, all_features_dff[0], obj_points_trans_ori)
-            contact_indices = get_contact_pts(all_points_dff, all_features_dff[0], hand_key_features, n_pts=100 // len(object_mesh_path_ls))
-            ### get contact point indices
-            
             ### get the contact timesteps
             distance = torch.norm(hand_key_joints[..., None, :] - obj_points_trans_ori[..., None, :, :], dim=-1, p=2)
             min_dis, min_dis_idx = torch.min(distance, dim=-1)
@@ -464,7 +457,20 @@ class BaseDatasetProcessor(ABC):
             start_idx_, end_idx_ = find_longest_false_substring(untouch_mask)
             start_idx = min(start_idx, start_idx_)
             end_idx = max(end_idx, end_idx_)
+            if start_idx == -1:
+                logging.warning(f"Sequence {raw_data['which_sequence']} on side {side} has no contact points. Skipping.")
+                return None
+            if end_idx - start_idx <= 30:
+                logging.warning(f"Sequence {raw_data['which_sequence']} on side {side} has too few frames: {end_idx - start_idx}. Skipping.")
+                return None
             ### get the contact timesteps
+            
+            ### get contact point indices
+            obj_points_trans_ori = apply_transformation_pt(all_points_dff, obj_transf_ls[obj_part_idx])
+            hand_key_joints = get_key_hand_joints(hand_joints)
+            hand_key_features = intepolate_feature(hand_key_joints, all_features_dff[0], obj_points_trans_ori)
+            contact_indices = get_contact_pts(all_points_dff, all_features_dff[0], hand_key_features, n_pts=100 // len(object_mesh_path_ls))
+            ### get contact point indices
 
             object_points_ls.append(all_points_dff)
             object_features_ls.append(all_features_dff)
@@ -473,9 +479,6 @@ class BaseDatasetProcessor(ABC):
         ### render & feature & contact points
         
         ### Return KEYS
-        if end_idx - start_idx <= 30:
-            logging.warning(f"Sequence {raw_data['which_sequence']} on side {side} has too few frames: {end_idx - start_idx}. Skipping.")
-            return None
         r_side = 'l' if side == 'r' else 'r'
         hand_thetas_rot6d = matrix_to_rotation_6d(quaternion_to_matrix(hand_coeffs))
         sequence_data = {
@@ -549,8 +552,11 @@ class BaseDatasetProcessor(ABC):
         whole_data_ls = []
         bad_seq_num = 0
         
-        # for idx in tqdm(range(len(self.data_ls)), desc=f"Processing {self.seq_data_name}"):
+        # 
         for idx in tqdm(sequence_indices, desc=f"Processing {self.which_dataset}-{self.seq_data_name}"):
+            if idx < 4:
+                print(f"Skipping index {idx} for debugging purposes.")
+                continue
             data_item = self.data_ls[idx]
             sequence_list = self._load_sequence_data(data_item) 
             
