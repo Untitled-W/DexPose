@@ -784,7 +784,7 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
 
 if __name__ == "__main__":
 
-    dataset_names = ['taco', 'dexycb',  'oakinkv2']
+    dataset_names = ['dexycb',  'oakinkv2']
     # dataset_names = ['taco']
     processed_data = []
     
