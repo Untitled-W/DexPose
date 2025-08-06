@@ -6,6 +6,7 @@
     "configurations": [
 
 
+
         {
             "name": "log vis",
             "type": "debugpy",
@@ -28,11 +29,5 @@
             "module": "dataset.preprocessor"
         },
 
-                {
-            "name": "preprocessor_ori",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "dataset_ori.preprocessor"
-        },
     ]
 }

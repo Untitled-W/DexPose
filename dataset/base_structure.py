@@ -15,7 +15,7 @@ from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate
 from pytorch3d.transforms import matrix_to_axis_angle, axis_angle_to_matrix, quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
 
 
-WMQ_IS_USING = False
+WMQ_IS_USING = True
 
 if WMQ_IS_USING:
 
@@ -371,7 +371,7 @@ class BaseDatasetProcessor(ABC):
         pass
     
     @abstractmethod
-    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int], pre_trans:torch.Tensor=None, device = torch.device('cuda')) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
         """Process hand data to get joints and parameters."""
         pass
     
@@ -410,14 +410,14 @@ class BaseDatasetProcessor(ABC):
         
         # Apply coordinate transformation
         # yup2xup = self._apply_coordinate_transform(side).to('cuda')
-        yup2xup = torch.eye(4).to('cuda')
+        # yup2xup = torch.eye(4).to('cuda')
         
         # Process hand data
-        hand_tsl, hand_coeffs, hand_joints = self._get_hand_info(raw_data, side, frame_indices, pre_trans=yup2xup, device='cuda')
+        hand_tsl, hand_coeffs, hand_joints = self._get_hand_info(raw_data, side, frame_indices)
         if hand_tsl is None: return None
         
         # Load object data
-        obj_transf_ls, object_name_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices, pre_trans=yup2xup, device='cuda')
+        obj_transf_ls, object_name_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices)
         if obj_transf_ls is None: return None
 
         ### render & feature & contact points
@@ -563,9 +563,17 @@ class BaseDatasetProcessor(ABC):
             for seq_data in sequence_list:
                 for side in ['l', 'r']:
                     if seq_data.get(f'{side}_valid', True):  # Check if this side has valid data
-                        processed_seq = self.process_sequence(seq_data, side)
-                        if processed_seq is not None: whole_data_ls.append(copy.deepcopy(processed_seq))
-                    
+
+                        print(f"Processing {idx}: {seq_data['which_dataset']}-{seq_data['which_sequence']} on side {side}")
+                        try:
+                            processed_seq = self.process_sequence(seq_data, side)
+                            if processed_seq is not None: 
+                                logging.info(f"Item {len(whole_data_ls):<4}: index {idx}, {seq_data['which_dataset']}-{seq_data['which_sequence']} from side {side}, len {processed_seq['seq_len']}")
+                                whole_data_ls.append(copy.deepcopy(processed_seq))
+                        except Exception as e:
+                            logging.error(f"Error processing {idx}: {seq_data['which_dataset']}-{seq_data['which_sequence']} on side {side}: {e}")
+                            bad_seq_num += 1
+
         
         logging.info(f"Processed {len(whole_data_ls)} sequences, {bad_seq_num} failed")
         return whole_data_ls
