@@ -218,7 +218,7 @@ class OAKINKv2Processor(BaseDatasetProcessor):
         """Apply transformation to points."""
         return apply_transformation_pt(points, transform)
 
-    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int], pre_trans: torch.Tensor = None, device = torch.device('cuda')) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
         """Process OAKINKv2 hand data."""
         
         h_coeffs, h_tsl, h_betas = self._extract_hand_coeffs(raw_data, side, frame_indices)
@@ -373,17 +373,17 @@ class TACOProcessor(BaseDatasetProcessor):
         else:
             return "unknown", "object", "target"
     
-    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int], pre_trans:torch.Tensor=None, device = torch.device('cuda')) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
         """Process TACO hand data. The ONLY transformation applied is the pre_trans."""
         hand_pose_dir = raw_data['hand_pose_dir']
         
         # Load hand poses
         if side == 'r':
             hand_pkl = pickle.load(open(os.path.join(hand_pose_dir, "right_hand.pkl"), "rb"))
-            hand_beta = pickle.load(open(os.path.join(hand_pose_dir, "right_hand_shape.pkl"), "rb"))["hand_shape"].reshape(10).detach().to(device)
+            hand_beta = pickle.load(open(os.path.join(hand_pose_dir, "right_hand_shape.pkl"), "rb"))["hand_shape"].reshape(10).detach().to('cuda')
         else:
             hand_pkl = pickle.load(open(os.path.join(hand_pose_dir, "left_hand.pkl"), "rb"))
-            hand_beta = pickle.load(open(os.path.join(hand_pose_dir, "left_hand_shape.pkl"), "rb"))["hand_shape"].reshape(10).detach().to(device)
+            hand_beta = pickle.load(open(os.path.join(hand_pose_dir, "left_hand_shape.pkl"), "rb"))["hand_shape"].reshape(10).detach().to('cuda')
         
         # Extract poses and translations
         hand_theta_list = []
@@ -396,12 +396,12 @@ class TACOProcessor(BaseDatasetProcessor):
             hand_theta_list.append(hand_pkl[key]["hand_pose"].detach().cpu().numpy())
             hand_trans_list.append(hand_pkl[key]["hand_trans"].detach().cpu().numpy())
         
-        hand_thetas_raw = torch.from_numpy(np.float32(hand_theta_list)).to(device)
-        hand_trans_raw = torch.from_numpy(np.float32(hand_trans_list)).to(device)
+        hand_thetas_raw = torch.from_numpy(np.float32(hand_theta_list)).to('cuda')
+        hand_trans_raw = torch.from_numpy(np.float32(hand_trans_list)).to('cuda')
         
         # Convert to quaternions
         hand_thetas_raw = axis_angle_to_quaternion(hand_thetas_raw.reshape(hand_thetas_raw.shape[0], 16, 3))
-        hand_transform = torch.eye(4).to(device).unsqueeze(0).repeat((hand_thetas_raw.shape[0], 1, 1))
+        hand_transform = torch.eye(4).to('cuda').unsqueeze(0).repeat((hand_thetas_raw.shape[0], 1, 1))
         hand_transform[:, :3, :3] = quaternion_to_matrix(hand_thetas_raw[:, 0])
         hand_transform[:, :3, 3] = hand_trans_raw
         hand_thetas_raw[:, 0] = matrix_to_quaternion(hand_transform[:, :3, :3])
@@ -419,7 +419,7 @@ class TACOProcessor(BaseDatasetProcessor):
         return hand_trans[frame_indices], hand_thetas[frame_indices], hand_joints[frame_indices]
     
 
-    def _get_object_info(self, raw_data: Dict[str, Any], frame_indices: List[int], pre_trans:torch.Tensor=None, device = torch.device('cuda')) -> Tuple[List[torch.Tensor], List[str]]:
+    def _get_object_info(self, raw_data: Dict[str, Any], frame_indices: List[int]) -> Tuple[List[torch.Tensor], List[str]]:
         """Load TACO object data"""
         obj_name = raw_data['obj_name']
         obj_poses = raw_data['obj_poses']
@@ -428,9 +428,8 @@ class TACOProcessor(BaseDatasetProcessor):
         obj_path = os.path.join(self.obj_dir, obj_name + "_cm.obj")
 
         # Apply coordinate transformation
-        if pre_trans is None:
-            pre_trans = torch.eye(4).to(device)
-        obj_poses_transformed = pre_trans @ torch.from_numpy(obj_poses).to(device).float()
+        pre_trans = torch.eye(4).to('cuda')
+        obj_poses_transformed = pre_trans @ torch.from_numpy(obj_poses).to('cuda').float()
         obj_transf_subset = obj_poses_transformed[frame_indices]
 
         # Store mesh path
@@ -485,7 +484,7 @@ class DexYCBProcessor(BaseDatasetProcessor):
                 'r_valid': True
             }]
 
-    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int], pre_trans: torch.Tensor = None, device = torch.device('cuda')) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _get_hand_info(self, raw_data: Dict[str, Any], side: str, frame_indices: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
         """Get hand tsl and coeffs information."""
         hand_pose_frame = raw_data['hand_pose'][frame_indices]
         p = torch.from_numpy(hand_pose_frame[..., : 48].astype(np.float32))
@@ -567,7 +566,7 @@ DATASET_CONFIGS = {
         'task_interval': 20,
         'which_dataset': 'Oakinkv2',
         'seq_data_name': 'feature',
-        'sequence_indices': list([20,30,40,50])  # Example sequence indices for processing
+        'sequence_indices': list(range(120, 130))  # Example sequence indices for processing
     },
     
     'taco': {
@@ -577,7 +576,7 @@ DATASET_CONFIGS = {
         'task_interval': 1,
         'which_dataset': 'Taco',
         'seq_data_name': 'feature',
-        'sequence_indices': None  # Example sequence indices for processing
+        'sequence_indices': list(range(120, 130))  # Example sequence indices for processing
     },
 
     'dexycb': {
@@ -587,17 +586,17 @@ DATASET_CONFIGS = {
         'task_interval': 1,
         'which_dataset': 'DexYCB',
         'seq_data_name': 'feature',
-        'sequence_indices': list([20,30,40,50])  # Example sequence indices for 
+        'sequence_indices': list(range(120, 130))  # Example sequence indices for 
     }
 }
 
-def setup_logging(level=logging.ERROR):
+def setup_logging(level=logging.INFO):
     """Setup logging configuration."""
     logging.basicConfig(
         level=level,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler('preprocessing.log'),
+            logging.FileHandler('dataset/logs/preprocessing.log'),
             logging.StreamHandler()
         ]
     )
@@ -757,6 +756,9 @@ def show_human_statistics(human_data: List[HumanSequenceData]):
 
     print()
 
+
+
+
 def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
     """
     Check data correctness by visualizing a few sequences.
@@ -775,20 +777,20 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
     for dataset_name, data_list in dataset_data.items():
         print(f"Dataset {dataset_name} has {len(data_list)} sequences")
         # Sample a few sequences for visualization
-        # sampled_data = random.sample(data_list, 2)
-        sampled_data = data_list
-        for d in sampled_data:
-            print(f"Visualizing sequence {d.which_sequence}")
-            visualize_human_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/dataset/vis_results/{d.which_dataset}_{d.which_sequence}.html')
+        sampled_data = random.sample(zip(data_list,range(len(data_list))), 5)
+        # sampled_data = data_list
+        for (d, idx) in sampled_data:
+            visualize_human_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/dataset/vis_results/({idx})_{d.which_dataset}_{d.which_sequence}_{d.side}')
 
 if __name__ == "__main__":
 
-    # dataset_names = ['dexycb',  'oakinkv2']
-    dataset_names = ['taco']
+    dataset_names = ['taco', 'dexycb',  'oakinkv2']
+    # dataset_names = ['taco']
     processed_data = []
     
     GENERATE = True
     if GENERATE:
+        setup_logging()
         processed_data = process_multiple_datasets(dataset_names)
     else:
         for dataset_name in dataset_names:
@@ -799,4 +801,4 @@ if __name__ == "__main__":
 
     # show_human_statistics(processed_data)
     
-    # check_data_correctness_by_vis(processed_data)
+    check_data_correctness_by_vis(processed_data)
