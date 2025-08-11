@@ -576,7 +576,7 @@ DATASET_CONFIGS = {
         'task_interval': 1,
         'which_dataset': 'Taco',
         'seq_data_name': 'feature',
-        'sequence_indices': list(range(120, 130))  # Example sequence indices for processing
+        'sequence_indices': list(range(120, 122))  # Example sequence indices for processing
     },
 
     'dexycb': {

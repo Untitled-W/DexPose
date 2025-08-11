@@ -494,9 +494,9 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
         retargeted_data = []
         for robot_name, qpos_list in qpos_dict.items():
             qpos_arr = torch.from_numpy(np.stack(qpos_list, axis=0).astype(np.float32))
-            robot_name_str= str(robot_name).split('.')[-1]
+            robot_name_str= str(robot_name).split('.')[-1]+'_hand'
             # np.save(save_dir / f"{str(robot_name).split('.')[-1]}_{data_id}.npy", qpos_arr)
-            retargeted_data.append(DexSequenceData(
+            retargeted_data.append(dict(
                 which_hand=robot_name_str,
                 hand_poses=qpos_arr,
                 side=data.side,
