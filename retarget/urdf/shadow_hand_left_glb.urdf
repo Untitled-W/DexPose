@@ -1,0 +1,945 @@
+<?xml version='1.0' encoding='ASCII'?>
+<robot name="shadow_left">
+  <link name="dummy_x_translation_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <link name="dummy_y_translation_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <link name="dummy_z_translation_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <link name="dummy_x_rotation_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <link name="dummy_y_rotation_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <link name="dummy_z_rotation_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <link name="world"/>
+  <link name="forearm">
+    <inertial>
+      <origin xyz="0.0 0.0 0.09" rpy="0.0 0.0 0.0"/>
+      <mass value="3.0"/>
+      <inertia ixx="0.0138" ixy="0.0" ixz="0.0" iyy="0.0138" iyz="0.0" izz="0.00744"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/forearm_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/collision/forearm_E3M5.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.07 0.07 0.07"/>
+      </geometry>
+      <origin xyz="0.0 -0.01 0.165" rpy="0.0 0.7853949999999998 0.0"/>
+    </collision>
+  </link>
+  <link name="wrist">
+    <inertial>
+      <origin xyz="0.0 0.0 0.029" rpy="0.0 0.0 0.0"/>
+      <mass value="0.1"/>
+      <inertia ixx="3.5e-05" ixy="0.0" ixz="0.0" iyy="6.4e-05" iyz="0.0" izz="4.38e-05"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/wrist_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.0135" length="0.03"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="-1.5707926535731234 1.5707926535755434 -3.1415926535731233"/>
+    </collision>
+    <collision>
+      <geometry>
+        <cylinder radius="0.011" length="0.01"/>
+      </geometry>
+      <origin xyz="0.026 0.0 0.034" rpy="3.141592653589793 1.5707926535755434 3.141592653589793"/>
+    </collision>
+    <collision>
+      <geometry>
+        <cylinder radius="0.011" length="0.01"/>
+      </geometry>
+      <origin xyz="-0.031 0.0 0.034" rpy="3.141592653589793 1.5707926535755434 3.141592653589793"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.027 0.018 0.01"/>
+      </geometry>
+      <origin xyz="0.021 0.0 0.011" rpy="0.0 -0.7853999999999999 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.027 0.018 0.01"/>
+      </geometry>
+      <origin xyz="-0.026 0.0 0.01" rpy="0.0 0.7854000000000001 0.0"/>
+    </collision>
+  </link>
+  <link name="palm">
+    <inertial>
+      <origin xyz="0.0 0.0 0.035" rpy="0.0 0.0 0.0"/>
+      <mass value="0.3"/>
+      <inertia ixx="0.0003581" ixy="0.0" ixz="0.0" iyy="0.0005287" iyz="0.0" izz="0.000191"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/palm_E3M5_left.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.062 0.007 0.09"/>
+      </geometry>
+      <origin xyz="-0.011 0.0085 0.042" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.036 0.017 0.09"/>
+      </geometry>
+      <origin xyz="0.002 -0.0035 0.042" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.026 0.017 0.01"/>
+      </geometry>
+      <origin xyz="-0.029 -0.0035 0.082" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.026 0.014 0.018"/>
+      </geometry>
+      <origin xyz="-0.0265 -0.001 0.07" rpy="0.2 0.0 -0.25"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.021 0.027 0.016"/>
+      </geometry>
+      <origin xyz="-0.0315 -0.0085 0.001" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.022 0.005 0.032"/>
+      </geometry>
+      <origin xyz="-0.0125 -0.015 0.009" rpy="0.0 0.0 0.48000000000000004"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.018 0.024 0.004"/>
+      </geometry>
+      <origin xyz="-0.011 0.0 0.089" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.02 0.024 0.032"/>
+      </geometry>
+      <origin xyz="0.03 0.0 0.009" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="ee_link"/>
+  <link name="imu"/>
+  <link name="ffknuckle">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.008"/>
+      <inertia ixx="2.6e-07" ixy="0.0" ixz="0.0" iyy="2.6e-07" iyz="0.0" izz="3.2e-07"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_knuckle_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0005" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/collision/f_knuckle_E3M5.obj"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="3.141592653589793 1.5707926535755434 3.141592653589793"/>
+    </collision>
+  </link>
+  <link name="ffproximal">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0225" rpy="0.0 0.0 0.0"/>
+      <mass value="0.03"/>
+      <inertia ixx="9.8e-06" ixy="0.0" ixz="0.0" iyy="1e-05" iyz="0.0" izz="1.8e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_proximal_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.007" length="0.04"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.025" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="ffmiddle">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0125" rpy="0.0 0.0 0.0"/>
+      <mass value="0.017"/>
+      <inertia ixx="2.6e-06" ixy="0.0" ixz="0.0" iyy="2.7e-06" iyz="0.0" izz="8.7e-07"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_middle_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.007" length="0.025"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0125" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <sphere radius="0.007"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <sphere radius="0.007"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.025" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="ffdistal">
+    <inertial>
+      <origin xyz="0.0 0.0 0.012" rpy="0.0 0.0 0.0"/>
+      <mass value="0.12"/>
+      <inertia ixx="9.4e-06" ixy="0.0" ixz="0.0" iyy="1.1e-05" iyz="0.0" izz="5.3e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_distal_pst.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/collision/f_distal_pst.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="fftip">
+    <inertial>
+      <mass value="0.001"/>
+      <inertia ixx="0.0" ixy="0.0" ixz="0.0" iyy="0.0" iyz="0.0" izz="0.0"/>
+    </inertial>
+  </link>
+  <link name="mfknuckle">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.008"/>
+      <inertia ixx="2.6e-07" ixy="0.0" ixz="0.0" iyy="2.6e-07" iyz="0.0" izz="3.2e-07"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_knuckle_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0005" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/collision/f_knuckle_E3M5.obj"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="mfproximal">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0225" rpy="0.0 0.0 0.0"/>
+      <mass value="0.03"/>
+      <inertia ixx="9.8e-06" ixy="0.0" ixz="0.0" iyy="1e-05" iyz="0.0" izz="1.8e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_proximal_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.007" length="0.04"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.025" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="mfmiddle">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0125" rpy="0.0 0.0 0.0"/>
+      <mass value="0.017"/>
+      <inertia ixx="2.6e-06" ixy="0.0" ixz="0.0" iyy="2.7e-06" iyz="0.0" izz="8.7e-07"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_middle_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.007" length="0.025"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0125" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <sphere radius="0.007"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <sphere radius="0.007"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.025" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="mfdistal">
+    <inertial>
+      <origin xyz="0.0 0.0 0.012" rpy="0.0 0.0 0.0"/>
+      <mass value="0.12"/>
+      <inertia ixx="9.4e-06" ixy="0.0" ixz="0.0" iyy="1.1e-05" iyz="0.0" izz="5.3e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_distal_pst.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/collision/f_distal_pst.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="mftip">
+    <inertial>
+      <mass value="0.001"/>
+      <inertia ixx="0.0" ixy="0.0" ixz="0.0" iyy="0.0" iyz="0.0" izz="0.0"/>
+    </inertial>
+  </link>
+  <link name="rfknuckle">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.008"/>
+      <inertia ixx="2.6e-07" ixy="0.0" ixz="0.0" iyy="2.6e-07" iyz="0.0" izz="3.2e-07"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_knuckle_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0005" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/collision/f_knuckle_E3M5.obj"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="rfproximal">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0225" rpy="0.0 0.0 0.0"/>
+      <mass value="0.03"/>
+      <inertia ixx="9.8e-06" ixy="0.0" ixz="0.0" iyy="1e-05" iyz="0.0" izz="1.8e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_proximal_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.007" length="0.04"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.025" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="rfmiddle">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0125" rpy="0.0 0.0 0.0"/>
+      <mass value="0.017"/>
+      <inertia ixx="2.6e-06" ixy="0.0" ixz="0.0" iyy="2.7e-06" iyz="0.0" izz="8.7e-07"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_middle_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.007" length="0.025"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0125" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <sphere radius="0.007"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <sphere radius="0.007"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.025" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="rfdistal">
+    <inertial>
+      <origin xyz="0.0 0.0 0.012" rpy="0.0 0.0 0.0"/>
+      <mass value="0.12"/>
+      <inertia ixx="9.4e-06" ixy="0.0" ixz="0.0" iyy="1.1e-05" iyz="0.0" izz="5.3e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_distal_pst.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/collision/f_distal_pst.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="rftip">
+    <inertial>
+      <mass value="0.001"/>
+      <inertia ixx="0.0" ixy="0.0" ixz="0.0" iyy="0.0" iyz="0.0" izz="0.0"/>
+    </inertial>
+  </link>
+  <link name="lfmetacarpal">
+    <inertial>
+      <origin xyz="0.0317486764706 0.0 0.0223529411765" rpy="0.0 0.9598999999999998 0.0"/>
+      <mass value="0.03"/>
+      <inertia ixx="1.45e-05" ixy="0.0" ixz="0.0" iyy="1.638e-05" iyz="0.0" izz="4.272e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/lf_metacarpal_E3M5_left.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 -0.9598999999999999 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.018 0.024 0.04"/>
+      </geometry>
+      <origin xyz="-0.026986375 0.0 0.019" rpy="0.0 -0.9598999999999999 0.0"/>
+    </collision>
+  </link>
+  <link name="lfknuckle">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.008"/>
+      <inertia ixx="2.6e-07" ixy="0.0" ixz="0.0" iyy="2.6e-07" iyz="0.0" izz="3.2e-07"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_knuckle_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0005" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/collision/f_knuckle_E3M5.obj"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="lfproximal">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0225" rpy="0.0 0.0 0.0"/>
+      <mass value="0.03"/>
+      <inertia ixx="9.8e-06" ixy="0.0" ixz="0.0" iyy="1e-05" iyz="0.0" izz="1.8e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_proximal_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.007" length="0.04"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.025" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="lfmiddle">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0125" rpy="0.0 0.0 0.0"/>
+      <mass value="0.017"/>
+      <inertia ixx="2.6e-06" ixy="0.0" ixz="0.0" iyy="2.7e-06" iyz="0.0" izz="8.7e-07"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_middle_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.007" length="0.025"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0125" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <sphere radius="0.007"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <sphere radius="0.007"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.025" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="lfdistal">
+    <inertial>
+      <origin xyz="0.0 0.0 0.012" rpy="0.0 0.0 0.0"/>
+      <mass value="0.12"/>
+      <inertia ixx="9.4e-06" ixy="0.0" ixz="0.0" iyy="1.1e-05" iyz="0.0" izz="5.3e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/f_distal_pst.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/collision/f_distal_pst.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="lftip">
+    <inertial>
+      <mass value="0.001"/>
+      <inertia ixx="0.0" ixy="0.0" ixz="0.0" iyy="0.0" iyz="0.0" izz="0.0"/>
+    </inertial>
+  </link>
+  <link name="thbase">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.01"/>
+      <inertia ixx="1.6e-07" ixy="0.0" ixz="0.0" iyy="1.6e-07" iyz="0.0" izz="1.6e-07"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <box size="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <sphere radius="0.011"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="thproximal">
+    <inertial>
+      <origin xyz="0.0 0.0 0.019" rpy="0.0 0.0 0.0"/>
+      <mass value="0.04"/>
+      <inertia ixx="1.36e-05" ixy="0.0" ixz="0.0" iyy="1.36e-05" iyz="0.0" izz="3.13e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/th_proximal_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 1.57079632679"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/collision/th_proximal_E3M5.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 1.57079632679"/>
+    </collision>
+  </link>
+  <link name="thhub">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.005"/>
+      <inertia ixx="1e-06" ixy="0.0" ixz="0.0" iyy="1e-06" iyz="0.0" izz="3e-07"/>
+    </inertial>
+    <collision>
+      <geometry>
+        <sphere radius="0.01"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="thmiddle">
+    <inertial>
+      <origin xyz="0.0 0.0 0.016" rpy="0.0 0.0 0.0"/>
+      <mass value="0.02"/>
+      <inertia ixx="5.1e-06" ixy="0.0" ixz="0.0" iyy="5.1e-06" iyz="0.0" izz="1.21e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/th_middle_E3M5.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 1.57079632679"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/collision/th_middle_E3M5.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="thdistal">
+    <inertial>
+      <origin xyz="0.0 0.0 0.01375" rpy="0.0 0.0 0.0"/>
+      <mass value="0.16"/>
+      <inertia ixx="2.1e-05" ixy="0.0" ixz="0.0" iyy="2.2e-05" iyz="0.0" izz="1e-05"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/th_distal_pst.glb" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/shadow_hand/meshes/visual/th_distal_pst.obj" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="thtip">
+    <inertial>
+      <mass value="0.001"/>
+      <inertia ixx="0.0" ixy="0.0" ixz="0.0" iyy="0.0" iyz="0.0" izz="0.0"/>
+    </inertial>
+  </link>
+  <joint name="dummy_x_translation_joint" type="prismatic">
+    <parent link="dummy_x_translation_link"/>
+    <child link="dummy_y_translation_link"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="10" velocity="3.14" lower="-5" upper="5"/>
+  </joint>
+  <joint name="dummy_y_translation_joint" type="prismatic">
+    <parent link="dummy_y_translation_link"/>
+    <child link="dummy_z_translation_link"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="10" velocity="3.14" lower="-5" upper="5"/>
+  </joint>
+  <joint name="dummy_z_translation_joint" type="prismatic">
+    <parent link="dummy_z_translation_link"/>
+    <child link="dummy_x_rotation_link"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" velocity="3.14" lower="-5" upper="5"/>
+  </joint>
+  <joint name="dummy_x_rotation_joint" type="revolute">
+    <parent link="dummy_x_rotation_link"/>
+    <child link="dummy_y_rotation_link"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="10" velocity="3.14" lower="-6.283185307179586" upper="6.283185307179586"/>
+  </joint>
+  <joint name="dummy_y_rotation_joint" type="revolute">
+    <parent link="dummy_y_rotation_link"/>
+    <child link="dummy_z_rotation_link"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="10" velocity="3.14" lower="-6.283185307179586" upper="6.283185307179586"/>
+  </joint>
+  <joint name="dummy_z_rotation_joint" type="revolute">
+    <parent link="dummy_z_rotation_link"/>
+    <child link="world"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" velocity="3.14" lower="-6.283185307179586" upper="6.283185307179586"/>
+  </joint>
+  <joint name="world_joint" type="fixed">
+    <parent link="world"/>
+    <child link="forearm"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 1.57079"/>
+    <axis xyz="1.0 0.0 0.0"/>
+  </joint>
+  <joint name="WRJ2" type="revolute">
+    <parent link="forearm"/>
+    <child link="wrist"/>
+    <origin xyz="0.0 -0.01 0.21301" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0.0 -1.0 0.0"/>
+    <limit effort="10.0" velocity="2.0" lower="-0.523598775598" upper="0.174532925199"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="ee_fixed_joint" type="fixed">
+    <parent link="palm"/>
+    <child link="ee_link"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+  </joint>
+  <joint name="WRJ1" type="revolute">
+    <parent link="wrist"/>
+    <child link="palm"/>
+    <origin xyz="0.0 0.0 0.034" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="30.0" velocity="2.0" lower="-0.698131700798" upper="0.488692190558"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="palm_to_imu" type="fixed">
+    <parent link="palm"/>
+    <child link="imu"/>
+    <origin xyz="0.01785 0.00765 0.049125" rpy="1.5707963535897933 6.535897931758683e-07 3.141592653589793"/>
+    <axis xyz="1.0 0.0 0.0"/>
+  </joint>
+  <joint name="FFJ4" type="revolute">
+    <parent link="palm"/>
+    <child link="ffknuckle"/>
+    <origin xyz="-0.033 0.0 0.095" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0.0 1.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="-0.349065850399" upper="0.349065850399"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="FFJ3" type="revolute">
+    <parent link="ffknuckle"/>
+    <child link="ffproximal"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="-0.261799387799" upper="1.57079632679"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="FFJ2" type="revolute">
+    <parent link="ffproximal"/>
+    <child link="ffmiddle"/>
+    <origin xyz="0.0 0.0 0.045" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="0.0" upper="1.57079632679"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="FFJ1" type="revolute">
+    <parent link="ffmiddle"/>
+    <child link="ffdistal"/>
+    <origin xyz="0.0 0.0 0.025" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="0.0" upper="1.57079632679"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="FFtip" type="fixed">
+    <parent link="ffdistal"/>
+    <child link="fftip"/>
+    <origin xyz="0.0 0.0 0.026" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+  </joint>
+  <joint name="MFJ4" type="revolute">
+    <parent link="palm"/>
+    <child link="mfknuckle"/>
+    <origin xyz="-0.011 0.0 0.099" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0.0 1.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="-0.349065850399" upper="0.349065850399"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="MFJ3" type="revolute">
+    <parent link="mfknuckle"/>
+    <child link="mfproximal"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="-0.261799387799" upper="1.57079632679"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="MFJ2" type="revolute">
+    <parent link="mfproximal"/>
+    <child link="mfmiddle"/>
+    <origin xyz="0.0 0.0 0.045" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="0.0" upper="1.57079632679"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="MFJ1" type="revolute">
+    <parent link="mfmiddle"/>
+    <child link="mfdistal"/>
+    <origin xyz="0.0 0.0 0.025" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="0.0" upper="1.57079632679"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="MFtip" type="fixed">
+    <parent link="mfdistal"/>
+    <child link="mftip"/>
+    <origin xyz="0.0 0.0 0.026" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+  </joint>
+  <joint name="RFJ4" type="revolute">
+    <parent link="palm"/>
+    <child link="rfknuckle"/>
+    <origin xyz="0.011 0.0 0.095" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0.0 -1.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="-0.349065850399" upper="0.349065850399"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="RFJ3" type="revolute">
+    <parent link="rfknuckle"/>
+    <child link="rfproximal"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="-0.261799387799" upper="1.57079632679"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="RFJ2" type="revolute">
+    <parent link="rfproximal"/>
+    <child link="rfmiddle"/>
+    <origin xyz="0.0 0.0 0.045" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="0.0" upper="1.57079632679"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="RFJ1" type="revolute">
+    <parent link="rfmiddle"/>
+    <child link="rfdistal"/>
+    <origin xyz="0.0 0.0 0.025" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="0.0" upper="1.57079632679"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="RFtip" type="fixed">
+    <parent link="rfdistal"/>
+    <child link="rftip"/>
+    <origin xyz="0.0 0.0 0.026" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+  </joint>
+  <joint name="LFJ5" type="revolute">
+    <parent link="palm"/>
+    <child link="lfmetacarpal"/>
+    <origin xyz="0.033 0.0 0.02071" rpy="0.0 0.9598999999999998 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="0.0" upper="0.785398163397"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="LFJ4" type="revolute">
+    <parent link="lfmetacarpal"/>
+    <child link="lfknuckle"/>
+    <origin xyz="-0.05397275 0.0 0.03779463" rpy="0.0 -0.9598999999999999 0.0"/>
+    <axis xyz="0.0 -1.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="-0.349065850399" upper="0.349065850399"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="LFJ3" type="revolute">
+    <parent link="lfknuckle"/>
+    <child link="lfproximal"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="-0.261799387799" upper="1.57079632679"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="LFJ2" type="revolute">
+    <parent link="lfproximal"/>
+    <child link="lfmiddle"/>
+    <origin xyz="0.0 0.0 0.045" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="0.0" upper="1.57079632679"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="LFJ1" type="revolute">
+    <parent link="lfmiddle"/>
+    <child link="lfdistal"/>
+    <origin xyz="0.0 0.0 0.025" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="0.0" upper="1.57079632679"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="LFtip" type="fixed">
+    <parent link="lfdistal"/>
+    <child link="lftip"/>
+    <origin xyz="0.0 0.0 0.026" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+  </joint>
+  <joint name="THJ5" type="revolute">
+    <parent link="palm"/>
+    <child link="thbase"/>
+    <origin xyz="-0.034 -0.00858 0.029" rpy="-0.785398163397 0.0 1.57079632679"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit effort="5.0" velocity="4.0" lower="-1.0471975512" upper="1.0471975512"/>
+    <dynamics damping="0.2"/>
+  </joint>
+  <joint name="THJ4" type="revolute">
+    <parent link="thbase"/>
+    <child link="thproximal"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0.0 -1.0 0.0"/>
+    <limit effort="3.0" velocity="4.0" lower="0.0" upper="1.2217304764"/>
+    <dynamics damping="0.2"/>
+  </joint>
+  <joint name="THJ3" type="revolute">
+    <parent link="thproximal"/>
+    <child link="thhub"/>
+    <origin xyz="0.0 0.0 0.038" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0.0 -1.0 0.0"/>
+    <limit effort="2.0" velocity="4.0" lower="-0.209439510239" upper="0.209439510239"/>
+    <dynamics damping="0.2"/>
+  </joint>
+  <joint name="THJ2" type="revolute">
+    <parent link="thhub"/>
+    <child link="thmiddle"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="2.0" velocity="2.0" lower="-0.698131700798" upper="0.698131700798"/>
+    <dynamics damping="0.1"/>
+  </joint>
+  <joint name="THJ1" type="revolute">
+    <parent link="thmiddle"/>
+    <child link="thdistal"/>
+    <origin xyz="0.0 0.0 0.032" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <limit effort="1.0" velocity="4.0" lower="-0.261799387799" upper="1.57079632679"/>
+    <dynamics damping="0.2"/>
+  </joint>
+  <joint name="THtip" type="fixed">
+    <parent link="thdistal"/>
+    <child link="thtip"/>
+    <origin xyz="0.0 0.0 0.0275" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+  </joint>
+</robot>
