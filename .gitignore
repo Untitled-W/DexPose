@@ -1,9 +1,11 @@
 data
 logs
-urdf
 vis_results
-test.py
 *_old
+wandb
+
+ObjDexEnvs
+*.zip
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
