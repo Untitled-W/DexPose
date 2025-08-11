@@ -50,7 +50,12 @@ def parse_object_path(dex_seq_data: dict):
     
     asset_root = []
     asset_file = []
-    if dataset_name == "TACO" or dataset_name == "Oakinkv2":
+    if dataset_name == "TACO":
+        for ii in dex_seq_data["object_mesh_path"]:
+            asset_root.append('/home/qianxu/Desktop/Project/DexPose/data/Taco/object_models')
+            name = ii.split('/')[-1]
+            asset_file.append(name[:-3]+'urdf')
+    elif dataset_name == "Oakinkv2":
         for ii in dex_seq_data["object_mesh_path"]:
             asset_root.append(os.path.dirname(ii))
             name = ii.split('/')[-1]
