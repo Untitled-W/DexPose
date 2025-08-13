@@ -111,9 +111,12 @@ def create_env(dex_seq_data: dict):
     object_asset_options.fix_base_link = False    
     object_asset_options.collapse_fixed_joints = True
     object_asset_options.disable_gravity = False
-    object_asset_options.thickness = 0.001
-    object_asset_options.angular_damping = 1
-    object_asset_options.linear_damping = 1
+    object_asset_options.vhacd_enabled = True
+    object_asset_options.vhacd_params = gymapi.VhacdParams()
+    object_asset_options.vhacd_params.resolution = 1000000
+    object_asset_options.vhacd_params.concavity = 0.002  # Adjust concavity for better collision mesh
+    object_asset_options.vhacd_params.max_num_vertices_per_ch = 64  # Limit vertices for simpler collision mesh
+    object_asset_options.vhacd_params.max_convex_hulls = 10  # Limit convex hulls for performance
     object_asset_options.mesh_normal_mode = gymapi.COMPUTE_PER_VERTEX
     object_asset_options.override_com = True
     object_asset_options.override_inertia = True
@@ -129,7 +132,12 @@ def create_env(dex_seq_data: dict):
     env = gym.create_env(sim, lower, upper, 1)
     
     # Add the robot to the environment
-    hand_actor = gym.create_actor(env, hand_handle, hand_pose, "hand", 0, 1)
+    hand_actor = gym.create_actor(env, hand_handle, hand_pose, "hand", 0, 0)
+    shadow_hand_properties = gym.get_actor_rigid_shape_properties(env, hand_actor)
+    for sh_prop in shadow_hand_properties:
+        sh_prop.friction = 20
+    gym.set_actor_rigid_shape_properties(env, hand_actor, shadow_hand_properties)
+
     # print("Hand DOF names:")
     # for i in range(gym.get_asset_dof_count(hand_handle)):
     #     dof_name = gym.get_asset_dof_name(hand_handle, i)
@@ -164,8 +172,20 @@ def create_env(dex_seq_data: dict):
         obj_pose = gymapi.Transform()
         obj_pose.p = gymapi.Vec3(0, 0, 0)
         obj_pose.r = gymapi.Quat(0, 0, 0, 1)
-        object_actor = gym.create_actor(env, obj_handle, obj_pose, "object", 0, 1)
+        object_actor = gym.create_actor(env, obj_handle, obj_pose, "object", 0, 0)
+        object_properties = gym.get_actor_rigid_shape_properties(env, object_actor)
+        for obj_prop in object_properties:
+            obj_prop.friction = 20
+        gym.set_actor_rigid_shape_properties(env, object_actor, object_properties)
+        object_body_properties = gym.get_actor_rigid_body_properties(env, object_actor)
+        for obj_body_prop in object_body_properties:
+            obj_body_prop.mass = 0.1
+            obj_body_prop.inertia.x.x = 0.01
+            obj_body_prop.inertia.y.y = 0.01
+            obj_body_prop.inertia.z.z = 0.01
+        gym.set_actor_rigid_body_properties(env, object_actor, object_body_properties)
         object_actors.append(object_actor)
+
 
     return gym, sim, viewer, env, hand_actor, hand_handle, object_actors
 
@@ -175,7 +195,7 @@ if __name__ == "__main__":
     with open("/home/qianxu/Desktop/Project/DexPose/data/Taco/dex_save/seq_shadow_hand_debug_1.p", "rb") as f:
         load_data = pickle.load(f)
 
-    dex_seq_data = load_data[1]
+    dex_seq_data = load_data[6]
 
     print(dex_seq_data['which_hand'], dex_seq_data['which_dataset'], dex_seq_data['which_sequence'], dex_seq_data['side'])
 
@@ -209,7 +229,7 @@ if __name__ == "__main__":
 
     ### Make hand tighter
     actions_extend = np.copy(hand_qpos)
-    positive_number = 0.4
+    positive_number = 0.0
     ## FFJ 4 3 2 1
     actions_extend[:, 8:12] += np.array([0, positive_number, positive_number, positive_number]).astype(np.float32)
     ### LFJ 5 4 3 2 1
@@ -231,8 +251,8 @@ if __name__ == "__main__":
     n_dof = hand_qpos.shape[-1]
     dof_state_template = np.zeros(n_dof, dtype=gymapi.DofState.dtype)
 
-    start_idx = 70
-    end_idx = 120
+    start_idx = 50
+    end_idx = 100
     t = start_idx
 
     while True:
@@ -249,7 +269,7 @@ if __name__ == "__main__":
 
             for k in range(K):
                 actor_idx = 1 + k
-                root_tensor_cpu[actor_idx, 0:3] = ts[k] + torch.tensor([0, -0.01, 0.53], device=ts.device)  # Offset the object position slightly above the ground
+                root_tensor_cpu[actor_idx, 0:3] = ts[k] + torch.tensor([0.02, -0.01, 0.03], device=ts.device)  # Offset the object position slightly above the ground
                 root_tensor_cpu[actor_idx, 3:7] = quats[k]
                 root_tensor_cpu[actor_idx, 7:13] = 0 
 
