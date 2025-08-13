@@ -5,6 +5,8 @@ from isaacgym import gymapi, gymutil
 from isaacgym import gymtorch
 import torch
 from pytorch3d.transforms import matrix_to_quaternion
+import time
+from utils.hand_model import HandModelURDF
 
 def setup_isaacgym_environment():
     # Create a gym instance
@@ -128,6 +130,10 @@ def create_env(dex_seq_data: dict):
     
     # Add the robot to the environment
     hand_actor = gym.create_actor(env, hand_handle, hand_pose, "hand", 0, 1)
+    # print("Hand DOF names:")
+    # for i in range(gym.get_asset_dof_count(hand_handle)):
+    #     dof_name = gym.get_asset_dof_name(hand_handle, i)
+    #     print(f"DOF {i}: {dof_name}")
 
     # set shadow_hand dof properties
     shadow_hand_dof_props = gym.get_asset_dof_properties(hand_handle)
@@ -149,13 +155,19 @@ def create_env(dex_seq_data: dict):
         shadow_hand_dof_props['damping'][i] = 20
         shadow_hand_dof_props['velocity'][i] = 1
 
+    # print("shadow_hand_dof_lower_limits: ", shadow_hand_dof_lower_limits)
+    # print("shadow_hand_dof_upper_limits: ", shadow_hand_dof_upper_limits)
+
     # Add objects to the environment
     object_actors = []
     for obj_handle in object_handles:
-        object_actor = gym.create_actor(env, obj_handle, gymapi.Transform(), "object", 0, 1)
+        obj_pose = gymapi.Transform()
+        obj_pose.p = gymapi.Vec3(0, 0, 0)
+        obj_pose.r = gymapi.Quat(0, 0, 0, 1)
+        object_actor = gym.create_actor(env, obj_handle, obj_pose, "object", 0, 1)
         object_actors.append(object_actor)
 
-    return gym, sim, viewer, env, hand_actor, object_actors
+    return gym, sim, viewer, env, hand_actor, hand_handle, object_actors
 
 if __name__ == "__main__":
     
@@ -165,11 +177,51 @@ if __name__ == "__main__":
 
     dex_seq_data = load_data[1]
 
-    gym, sim, viewer, env, hand_actor, object_actors = create_env(dex_seq_data)
+    print(dex_seq_data['which_hand'], dex_seq_data['which_dataset'], dex_seq_data['which_sequence'], dex_seq_data['side'])
 
-    hand_qpos = dex_seq_data['hand_poses'] # T X n_dof
+    gym, sim, viewer, env, hand_actor, hand_handle, object_actors = create_env(dex_seq_data)
+
+    pk_hand_qpos = dex_seq_data['hand_poses'] # T X n_dof
     obj_poses = dex_seq_data['obj_poses'] # K X T X 4 X 4
     K, T = obj_poses.shape[:2]
+
+    side = 'left' if dex_seq_data['side'] == 0 else 'right'
+    hand_asset_root = os.path.join("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands", dex_seq_data['which_hand'])
+    robot = HandModelURDF(dex_seq_data['which_hand'],os.path.join(hand_asset_root, f"new_{side}_glb.urdf"),os.path.join(hand_asset_root, f'meshes'))
+
+    ### Create a mapping from PK to Isaac
+    isaac_name_to_idx = {}
+    for i in range(gym.get_asset_dof_count(hand_handle)):
+        dof_name = gym.get_asset_dof_name(hand_handle, i)
+        isaac_name_to_idx[dof_name] = i
+    print("Isaac DOF names:", isaac_name_to_idx)
+
+    pk_name_to_idx = {}
+    for idx, name in enumerate(robot.joints_names):
+        pk_name_to_idx[name] = idx
+    print("PK DOF names:", pk_name_to_idx)
+
+    # remap pk_hand_qpos to isaacgym
+    hand_qpos = np.zeros((T, gym.get_actor_dof_count(env, hand_actor)), dtype=np.float32)
+    for pk_name, pk_idx in pk_name_to_idx.items():
+        isaac_idx = isaac_name_to_idx[pk_name]
+        hand_qpos[:, isaac_idx] = pk_hand_qpos[:, pk_idx]
+
+    ### Make hand tighter
+    actions_extend = np.copy(hand_qpos)
+    positive_number = 0.4
+    ## FFJ 4 3 2 1
+    actions_extend[:, 8:12] += np.array([0, positive_number, positive_number, positive_number]).astype(np.float32)
+    ### LFJ 5 4 3 2 1
+    actions_extend[:, 20:25] += np.array([positive_number, 0, positive_number, positive_number, positive_number]).astype(np.float32)
+    ### MFJ 4 3 2 1
+    actions_extend[:, 12:16] += np.array([0, positive_number, positive_number, positive_number]).astype(np.float32)
+    ### RFJ 4 3 2 1
+    actions_extend[:, 16:20] += np.array([0, positive_number, positive_number, positive_number]).astype(np.float32)
+    ### THJ 5 4 3 2 1
+    actions_extend[:, 25:30] += np.array([positive_number, positive_number, positive_number, positive_number, positive_number]).astype(np.float32)
+
+    hand_qpos = np.copy(actions_extend)
 
     SIM = True
 
@@ -179,20 +231,25 @@ if __name__ == "__main__":
     n_dof = hand_qpos.shape[-1]
     dof_state_template = np.zeros(n_dof, dtype=gymapi.DofState.dtype)
 
-    for t in range(T):
+    start_idx = 70
+    end_idx = 120
+    t = start_idx
 
-        if t == 0 or not SIM: 
+    while True:
+        # for t in range(start_idx, T):
+
+        if t == start_idx or not SIM: 
             ts = obj_poses[:, t, :3, 3].float()          # [K, 3]
             Rs = obj_poses[:, t, :3, :3].float()         # [K, 3, 3]
-            quats = torch.stack([matrix_to_quaternion(R) for R in Rs])     # [K, 4]  (x,y,z,w)
-            quats = quats[:, [3, 0, 1, 2]]   
+            quats = torch.stack([matrix_to_quaternion(R) for R in Rs])     # [K, 4]  (w, x,y,z)
+            quats = quats[:, [1, 2, 3, 0]]  # Reorder to (x, y, z, w)
 
             gym.refresh_actor_root_state_tensor(sim)
             root_tensor_cpu = root_tensor.clone()
 
             for k in range(K):
                 actor_idx = 1 + k
-                root_tensor_cpu[actor_idx, 0:3] = ts[k]
+                root_tensor_cpu[actor_idx, 0:3] = ts[k] + torch.tensor([0, -0.01, 0.53], device=ts.device)  # Offset the object position slightly above the ground
                 root_tensor_cpu[actor_idx, 3:7] = quats[k]
                 root_tensor_cpu[actor_idx, 7:13] = 0 
 
@@ -210,8 +267,59 @@ if __name__ == "__main__":
         gym.step_graphics(sim)
         gym.draw_viewer(viewer, sim, True)
         gym.sync_frame_time(sim)
+        time.sleep(0.05)  # sleep for 50ms, adjust as needed
+
+        t += 1
+        if t == end_idx: t = start_idx
 
     # Cleanup
     gym.destroy_viewer(viewer)
     gym.destroy_sim(sim)
 
+
+def generate_hand_trajectory(gym, env, hand_actor):
+    # Get DOF properties and limits
+    dof_props = gym.get_actor_dof_properties(env, hand_actor)
+    dof_count = gym.get_actor_dof_count(env, hand_actor)
+    lower_limits = dof_props['lower']
+    upper_limits = dof_props['upper']
+
+    # Only consider joints from the seventh onward
+    start_joint = 6
+    trajectory = []
+
+    # For each joint from the seventh onward, move it through its range
+    for joint_idx in range(start_joint, dof_count):
+        joint_traj = []
+        # Generate 10 steps between lower and upper limits
+        for alpha in np.linspace(0, 1, 10):
+            pos = np.zeros(dof_count)
+            # Set all joints to default (midpoint)
+            pos[:] = (lower_limits + upper_limits) / 2
+            # Move only the current joint
+            pos[joint_idx] = lower_limits[joint_idx] * (1 - alpha) + upper_limits[joint_idx] * alpha
+            joint_traj.append(pos.copy())
+        trajectory.append(joint_traj)
+    return trajectory
+
+
+# with open("/home/qianxu/Desktop/Project/DexPose/data/Taco/dex_save/seq_shadow_hand_debug_1.p", "rb") as f:
+#     load_data = pickle.load(f)
+
+# dex_seq_data = load_data[0]
+# gym, sim, viewer, env, hand_actor, object_actors = create_env(dex_seq_data)
+
+# traj = generate_hand_trajectory(gym, env, hand_actor)
+# while True:
+#     for joint_traj in traj:
+#         for qpos in joint_traj:
+#             dof_state = np.zeros(qpos.shape[0], dtype=[('pos', np.float32), ('vel', np.float32)])
+#             dof_state['pos'] = qpos
+#             dof_state['vel'] = 0.0
+#             gym.set_actor_dof_states(env, hand_actor, dof_state, gymapi.STATE_POS)
+#             gym.simulate(sim)
+#             gym.fetch_results(sim, True)
+#             gym.step_graphics(sim)
+#             gym.draw_viewer(viewer, sim, True)
+#             gym.sync_frame_time(sim)
+#             time.sleep(0.05)

@@ -140,6 +140,14 @@ class HandModelURDF:
                 set_joint_range_recurse(children)
         
         set_joint_range_recurse(self.chain._root)
+
+        # Print the name of each hand DOF index
+        print("Hand DOF names:")
+        for idx, name in enumerate(self.joints_names):
+                print(f"Index {idx}: {name}")
+                print(f"Lower limit: {self.joints_lower[idx].item()}")
+                print(f"Upper limit: {self.joints_upper[idx].item()}")
+
         self.joints_lower = torch.stack(
             self.joints_lower).float().to(self.device)
         self.joints_upper = torch.stack(
@@ -190,32 +198,46 @@ class HandModelURDF:
 
 def load_robot(robot_name_str: str, side):
 
-    def urdf_name_map(robot_name, side):
-        name = {
-            'shadow': 'shadow_',
-            'leap': 'leap_',
-            'svh': 'schunk_svh_',
-            'allegro': 'allegro_',
-            'barrett': 'barrett_',
-            'inspire': 'inspire_',
-            'panda': 'panda_gripper',
-        }
-        if robot_name == 'panda': return name[robot_name]
-        return name[robot_name] + 'hand_' + side
-
-    asset_name_map = {
-        'shadow': 'shadow_hand',
-        'leap': 'leap_hand',
-        'svh': 'schunk_hand',
-        'allegro': 'allegro_hand',
-        'barrett': 'barrett_hand',
-        'inspire': 'inspire_hand',
-        'panda': 'panda_gripper',
-    }
-
+    hand_asset_root = os.path.join("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands", robot_name_str)
+    
     robot = HandModelURDF(robot_name_str,
-                          f'/home/qianxu/Desktop/Project/DexPose/retarget/urdf/{urdf_name_map(robot_name_str, side)}_glb.urdf',
-                          f'/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/{asset_name_map[robot_name_str]}/meshes',
+                        #   f'/home/qianxu/Desktop/Project/DexPose/retarget/urdf/{robot_name_str}_{side}_glb.urdf',
+                        #   f'/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/{robot_name_str}/meshes',
+                        os.path.join(hand_asset_root, f'new_{side}_glb.urdf'),
+                        os.path.join(hand_asset_root, f'meshes'),
                         )
 
     return robot
+
+'''shadow hand
+Index 0: dummy_x_translation_joint
+Index 1: dummy_y_translation_joint
+Index 2: dummy_z_translation_joint
+Index 3: dummy_x_rotation_joint
+Index 4: dummy_y_rotation_joint
+Index 5: dummy_z_rotation_joint
+Index 6: WRJ2
+Index 7: WRJ1
+Index 8: FFJ4
+Index 9: FFJ3
+Index 10: FFJ2
+Index 11: FFJ1
+Index 12: MFJ4
+Index 13: MFJ3
+Index 14: MFJ2
+Index 15: MFJ1
+Index 16: RFJ4
+Index 17: RFJ3
+Index 18: RFJ2
+Index 19: RFJ1
+Index 20: LFJ5
+Index 21: LFJ4
+Index 22: LFJ3
+Index 23: LFJ2
+Index 24: LFJ1
+Index 25: THJ5
+Index 26: THJ4
+Index 27: THJ3
+Index 28: THJ2
+Index 29: THJ1
+'''

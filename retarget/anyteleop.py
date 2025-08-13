@@ -52,7 +52,7 @@ DATASET_CONFIGS = {
         'task_interval': 1,
         'which_dataset': 'Taco',
         'seq_data_name': 'debug',
-        'sequence_indices': list(range(0, 10))  # Example sequence indices for processing
+        # 'sequence_indices': list(range(0, 10))  # Example sequence indices for processing
     },
 
     'dexycb': {
@@ -86,6 +86,7 @@ def main_retarget(dataset_names: List[str], robots: List[RobotName]):
             load_data = pickle.load(f)
         sequence_indices = DATASET_CONFIGS[dataset_name].get('sequence_indices')
         sequence_indices = sequence_indices if sequence_indices is not None else list(range(len(load_data)))
+        print(sequence_indices)
 
         for idx in tqdm(sequence_indices, desc=f"Processing {dataset_name}"):
             sampled_data = load_data[idx]
@@ -130,7 +131,7 @@ def check_data_correctness_by_vis(dex_data: List[DexSequenceData]):
     
     dataset_data = {}
     for data in dex_data:
-        name = data.which_dataset + "_" + data.which_hand
+        name = data['which_dataset'] + "_" + data['which_hand']
         if name not in dataset_data:
             dataset_data[name] = []
         dataset_data[name].append(data)
@@ -141,17 +142,20 @@ def check_data_correctness_by_vis(dex_data: List[DexSequenceData]):
         sampled_data = data_list
         # sampled_data = random.sample(data_list, 2)
         for d in sampled_data:
-            print(f"Visualizing sequence {d.which_sequence}")
-            visualize_dex_hand_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/retarget/vis_results/{d.which_hand}_{d.which_dataset}_{d.which_sequence}.html')
-
-
+            print(f"Visualizing sequence {d['which_sequence']}")
+            visualize_dex_hand_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/retarget/vis_results/debug_{d["which_hand"]}_{d["which_dataset"]}_{d["which_sequence"]}_{d["side"]}.html')
+            # with open(f'./qpos.txt', 'w') as f:
+            #     for t in range(d['hand_poses'].shape[0]):
+            #         f.write(f"Time step {t}:\n")
+            #         f.write(str(d['hand_poses'][t].cpu().numpy().astype(np.float32)))
+            #         f.write("\n\n")
 
 if __name__ == "__main__":
 
     # dataset_names = ['dexycb', 'taco', 'oakinkv2']
     dataset_names = ['taco']
 
-    robots = [RobotName.allegro, RobotName.shadow, RobotName.leap, RobotName.inspire]
+    robots = [RobotName.shadow, ]# RobotName.allegro, RobotName.leap, RobotName.inspire]
 
     robot_dir = (
         Path("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets").absolute() / "robots" / "hands"
