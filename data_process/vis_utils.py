@@ -103,8 +103,10 @@ def get_multiview_dff(
     H, W = masks.shape[1:3]
     if ds_points is None:
         all_points = torch.cat(points_ls, dim=0) 
-        ds_points, _ = sample_farthest_points(all_points.unsqueeze(0), K=n_points) ###0701
+        ds_points, _ = sample_farthest_points(all_points.unsqueeze(0), K=min(n_points, all_points.shape[0])) ###0701
         ds_points = ds_points.squeeze(0).to(features.device)  # (N, 3)
+        if ds_points.shape[0] < n_points:
+            ds_points = torch.cat([ds_points, ds_points[:n_points - ds_points.shape[0]]], dim=0)  # Pad to n_points
 
     maximal_distance = torch.cdist(ds_points, ds_points).max()
     ball_drop_radius = maximal_distance * tolerance
