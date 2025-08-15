@@ -854,28 +854,28 @@ def visualize_dex_hand_sequence(seq_data, filename: Optional[str] = None):
         seq_data (DexHandSequenceData): The sequence data containing hand poses and meshes.
         filename (Optional[str]): If provided, save the visualization to this file.
     """
-    data_id = seq_data.which_dataset + "_" + seq_data.which_sequence
-    hand_type = 'left' if seq_data.side == 0 else 'right'
-    robot_name_str = seq_data.which_hand
+    data_id = seq_data["which_dataset"] + "_" + seq_data["which_sequence"]
+    hand_type = 'left' if seq_data["side"] == 0 else 'right'
+    robot_name_str = seq_data["which_hand"]
     fps = 10
 
     robot = load_robot(robot_name_str, hand_type)
 
     ### robot hand meshes ###
     hand_meshes = []
-    for i in tqdm(range(seq_data.hand_poses.shape[0])):
-        robot.set_qpos(seq_data.hand_poses[i])
+    for i in tqdm(range(seq_data["hand_poses"].shape[0])):
+        robot.set_qpos(seq_data["hand_poses"][i])
         hand_mesh = robot.get_hand_mesh()
         hand_meshes.append(hand_mesh)
 
 
     ### hand joints ###
-    mano_hand_joints, hand_verts = extract_hand_points_and_mesh(seq_data.hand_tsls, seq_data.hand_coeffs, seq_data.side)
+    mano_hand_joints, hand_verts = extract_hand_points_and_mesh(seq_data["hand_tsls"], seq_data["hand_coeffs"], seq_data["side"])
 
 
     ### point clouds ###
     pc = get_point_clouds_from_human_data(seq_data)
-    pc_ls = apply_transformation_human_data(pc, seq_data.obj_poses)
+    pc_ls = apply_transformation_human_data(pc, seq_data["obj_poses"])
     pc_ls = [np.asarray(pc_ls)] # due to some dim issue
 
 

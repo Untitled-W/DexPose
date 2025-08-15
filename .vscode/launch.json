@@ -6,6 +6,18 @@
     "configurations": [
 
         {
+            "name": "isaac",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "train_rlgames.py",
+            "console": "integratedTerminal",
+            "args": ["--task", "ShadowHandFreeWithPhysics",
+                    "--algo", "arctic_grasp",
+                    "--seed", "22", "--num_envs", "8", "--play", "--enable_camera", "--start_idx", "0", "--start_timestep", "100"],
+            "cwd": "/home/qianxu/Desktop/Project/DexPose/ObjDexEnvs/dexteroushandenvs",
+        },
+
+        {
             "name": "log vis",
             "type": "debugpy",
             "request": "launch",

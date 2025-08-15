@@ -415,7 +415,7 @@ def get_point_clouds_from_dexycb(data: dict):
 
 def get_point_clouds_from_human_data(seq_data, ds_num=1000):
     obj_mesh = []
-    for mesh_path in seq_data.object_mesh_path:
+    for mesh_path in seq_data["object_mesh_path"]:
         obj_mesh.append(o3d.io.read_triangle_mesh(mesh_path))
     original_pc = [np.asarray(mesh.vertices) for mesh in obj_mesh if mesh is not None]
 
@@ -424,7 +424,7 @@ def get_point_clouds_from_human_data(seq_data, ds_num=1000):
         ]
     pc_ds = [pc[pc_idx] for pc, pc_idx in zip(original_pc, original_pc_ls)]
 
-    if seq_data.which_dataset == 'TACO':
+    if seq_data["which_dataset"] == 'TACO':
         for i in range(len(pc_ds)):
             pc_ds[i] *= 0.01
 

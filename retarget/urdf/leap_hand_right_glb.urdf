@@ -1,0 +1,881 @@
+<?xml version='1.0' encoding='ASCII'?>
+<robot name="leap_right">
+  <link name="dummy_x_translation_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <link name="dummy_y_translation_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <link name="dummy_z_translation_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <link name="dummy_x_rotation_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <link name="dummy_y_rotation_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <link name="dummy_z_rotation_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.01"/>
+      <inertia ixx="0.0001" ixy="0.0" ixz="0.0" iyy="0.0001" iyz="0.0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <link name="base"/>
+  <link name="palm_lower">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.237"/>
+      <inertia ixx="0.000354094" ixy="-1.193e-06" ixz="-2.445e-06" iyy="0.000260915" iyz="-2.905e-06" izz="0.000529257"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/palm_lower.glb"/>
+      </geometry>
+      <origin xyz="-0.02 0.02575 -0.0347" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.022 0.026 0.034"/>
+      </geometry>
+      <origin xyz="-0.009 0.008 -0.011" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.022 0.026 0.034"/>
+      </geometry>
+      <origin xyz="-0.009 -0.037 -0.011" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.022 0.026 0.034"/>
+      </geometry>
+      <origin xyz="-0.009 -0.082 -0.011" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.058 0.02 0.046"/>
+      </geometry>
+      <origin xyz="-0.066 -0.078 -0.0115" rpy="0.0 0.0 -0.2967"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.02 0.12 0.03"/>
+      </geometry>
+      <origin xyz="-0.03 -0.035 -0.003" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.01 0.12 0.02"/>
+      </geometry>
+      <origin xyz="-0.032 -0.035 -0.024" rpy="0.0 0.7850000000000001 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.024 0.116 0.046"/>
+      </geometry>
+      <origin xyz="-0.048 -0.033 -0.0115" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.044 0.052 0.046"/>
+      </geometry>
+      <origin xyz="-0.078 -0.053 -0.0115" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.004 0.036 0.034"/>
+      </geometry>
+      <origin xyz="-0.098 -0.009 -0.006" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.044 0.056 0.004"/>
+      </geometry>
+      <origin xyz="-0.078 -0.003 0.01" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="mcp_joint">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.044"/>
+      <inertia ixx="1.1499e-05" ixy="3.049e-06" ixz="1.21e-07" iyy="7.796e-06" iyz="1.12e-07" izz="1.4759e-05"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/mcp_joint.glb"/>
+      </geometry>
+      <origin xyz="0.0084 0.0077 0.01465" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.02 0.006 0.034"/>
+      </geometry>
+      <origin xyz="0.0 0.018 0.0147" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.028 0.04 0.02"/>
+      </geometry>
+      <origin xyz="-0.027 0.042 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.034 0.006 0.02"/>
+      </geometry>
+      <origin xyz="-0.0262 0.02 0.0146" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.02 0.024 0.008"/>
+      </geometry>
+      <origin xyz="-0.0295 0.035 0.029" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 0.005 0.03" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 0.005 -0.001" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="pip">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.032"/>
+      <inertia ixx="4.798e-06" ixy="1.2e-08" ixz="4e-09" iyy="2.862e-06" iyz="1.1e-08" izz="4.234e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/pip.glb"/>
+      </geometry>
+      <origin xyz="0.0096 0.0002 0.0007" rpy="-1.5707900000096782 -1.5707899999927801 9.67825588725589e-12"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.034 0.026 0.022"/>
+      </geometry>
+      <origin xyz="0.0075 -0.0002 -0.011" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="dip">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.037"/>
+      <inertia ixx="5.542e-06" ixy="-6.07e-07" ixz="-1.7e-08" iyy="5.727e-06" iyz="-2.3e-08" izz="6.682e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/dip.glb"/>
+      </geometry>
+      <origin xyz="0.0211 -0.0084 0.0097" rpy="-3.1415926 2.220446049250313e-16 3.2814284336339646e-24"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.016 0.006 0.026"/>
+      </geometry>
+      <origin xyz="0.0 -0.02 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.02 0.004 0.034"/>
+      </geometry>
+      <origin xyz="0.0 -0.016 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 -0.0045 0.03" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 -0.0045 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.034 0.022 0.026"/>
+      </geometry>
+      <origin xyz="0.0075 -0.035 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="fingertip">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.016"/>
+      <inertia ixx="3.368e-06" ixy="1.15e-07" ixz="0.0" iyy="1.556e-06" iyz="0.0" izz="2.863e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/fingertip.glb"/>
+      </geometry>
+      <origin xyz="0.0132 -0.0061 0.0144" rpy="3.1415926 2.220446049250313e-16 -3.2814284336339646e-24"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.02 0.006 0.03"/>
+      </geometry>
+      <origin xyz="0.0 -0.017 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.022 0.004"/>
+      </geometry>
+      <origin xyz="0.0 -0.006 0.03" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.022 0.004"/>
+      </geometry>
+      <origin xyz="0.0 -0.006 -0.001" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/collision/white_tip.obj"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="mcp_joint_2">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.044"/>
+      <inertia ixx="1.1499e-05" ixy="3.049e-06" ixz="1.21e-07" iyy="7.796e-06" iyz="1.12e-07" izz="1.4759e-05"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/mcp_joint.glb"/>
+      </geometry>
+      <origin xyz="0.0084 0.0077 0.01465" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.02 0.006 0.034"/>
+      </geometry>
+      <origin xyz="0.0 0.018 0.0147" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.028 0.04 0.02"/>
+      </geometry>
+      <origin xyz="-0.027 0.042 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.034 0.006 0.02"/>
+      </geometry>
+      <origin xyz="-0.0262 0.02 0.0146" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.02 0.024 0.008"/>
+      </geometry>
+      <origin xyz="-0.0295 0.035 0.029" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 0.005 0.03" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 0.005 -0.001" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="pip_2">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.032"/>
+      <inertia ixx="4.798e-06" ixy="1.2e-08" ixz="4e-09" iyy="2.862e-06" iyz="1.1e-08" izz="4.234e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/pip.glb"/>
+      </geometry>
+      <origin xyz="0.0096 0.0003 0.0007" rpy="-1.5707900000096782 -1.5707899999927801 9.67825588725589e-12"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.034 0.026 0.022"/>
+      </geometry>
+      <origin xyz="0.0075 -0.0002 -0.011" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="dip_2">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.037"/>
+      <inertia ixx="5.542e-06" ixy="-6.07e-07" ixz="-1.7e-08" iyy="5.727e-06" iyz="-2.3e-08" izz="6.682e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/dip.glb"/>
+      </geometry>
+      <origin xyz="0.0211 -0.0084 0.0097" rpy="-3.14159 2.220446049250313e-16 1.6248551233397535e-22"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.016 0.006 0.026"/>
+      </geometry>
+      <origin xyz="0.0 -0.02 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.02 0.004 0.034"/>
+      </geometry>
+      <origin xyz="0.0 -0.016 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 -0.0045 0.03" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 -0.0045 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.034 0.022 0.026"/>
+      </geometry>
+      <origin xyz="0.0075 -0.035 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="fingertip_2">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.016"/>
+      <inertia ixx="3.368e-06" ixy="1.15e-07" ixz="0.0" iyy="1.556e-06" iyz="0.0" izz="2.863e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/fingertip.glb"/>
+      </geometry>
+      <origin xyz="0.0132 -0.0061 0.0145" rpy="3.14159 2.220446049250313e-16 -1.6248551233397535e-22"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.02 0.006 0.03"/>
+      </geometry>
+      <origin xyz="0.0 -0.017 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.022 0.004"/>
+      </geometry>
+      <origin xyz="0.0 -0.006 0.03" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.022 0.004"/>
+      </geometry>
+      <origin xyz="0.0 -0.006 -0.001" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/collision/white_tip.obj"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="mcp_joint_3">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.044"/>
+      <inertia ixx="1.1499e-05" ixy="3.049e-06" ixz="1.21e-07" iyy="7.796e-06" iyz="1.12e-07" izz="1.4759e-05"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/mcp_joint.glb"/>
+      </geometry>
+      <origin xyz="0.0084 0.0077 0.01465" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.02 0.006 0.034"/>
+      </geometry>
+      <origin xyz="0.0 0.018 0.0147" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.028 0.04 0.02"/>
+      </geometry>
+      <origin xyz="-0.027 0.042 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.034 0.006 0.02"/>
+      </geometry>
+      <origin xyz="-0.0262 0.02 0.0146" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.02 0.024 0.008"/>
+      </geometry>
+      <origin xyz="-0.0295 0.035 0.029" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 0.005 0.03" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 0.005 -0.001" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="pip_3">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.032"/>
+      <inertia ixx="4.798e-06" ixy="1.2e-08" ixz="4e-09" iyy="2.862e-06" iyz="1.1e-08" izz="4.234e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/pip.glb"/>
+      </geometry>
+      <origin xyz="0.0096 0.0003 0.0007" rpy="-1.5707900000096782 -1.5707899999927801 9.67825588725589e-12"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.034 0.026 0.022"/>
+      </geometry>
+      <origin xyz="0.0075 -0.0002 -0.011" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="dip_3">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.037"/>
+      <inertia ixx="5.542e-06" ixy="-6.07e-07" ixz="-1.7e-08" iyy="5.727e-06" iyz="-2.3e-08" izz="6.682e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/dip.glb"/>
+      </geometry>
+      <origin xyz="0.0211 -0.0084 0.0097" rpy="-3.14159 2.220446049250313e-16 1.6248551233397535e-22"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.016 0.006 0.026"/>
+      </geometry>
+      <origin xyz="0.0 -0.02 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.02 0.004 0.034"/>
+      </geometry>
+      <origin xyz="0.0 -0.016 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 -0.0045 0.03" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 -0.0045 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.034 0.022 0.026"/>
+      </geometry>
+      <origin xyz="0.0075 -0.035 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="fingertip_3">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.016"/>
+      <inertia ixx="3.368e-06" ixy="1.15e-07" ixz="0.0" iyy="1.556e-06" iyz="0.0" izz="2.863e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/fingertip.glb"/>
+      </geometry>
+      <origin xyz="0.0132 -0.0061 0.0145" rpy="3.14159 2.220446049250313e-16 -1.6248551233397535e-22"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.02 0.006 0.03"/>
+      </geometry>
+      <origin xyz="0.0 -0.017 0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.022 0.004"/>
+      </geometry>
+      <origin xyz="0.0 -0.006 0.03" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.022 0.004"/>
+      </geometry>
+      <origin xyz="0.0 -0.006 -0.001" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/collision/white_tip.obj"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="thumb_temp_base">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.032"/>
+      <inertia ixx="4.798e-06" ixy="1.2e-08" ixz="4e-09" iyy="2.862e-06" iyz="1.1e-08" izz="4.234e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/pip.glb"/>
+      </geometry>
+      <origin xyz="-0.0053 0.0003 0.00078" rpy="-1.5707900000096782 -1.5707899999927801 9.67825588725589e-12"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.034 0.026 0.022"/>
+      </geometry>
+      <origin xyz="0.0075 -0.0002 -0.011" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="thumb_pip">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.003"/>
+      <inertia ixx="5.93e-07" ixy="0.0" ixz="0.0" iyy="5.49e-07" iyz="0.0" izz="2.24e-07"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/thumb_pip.glb"/>
+      </geometry>
+      <origin xyz="0.01196 0.0 -0.0158" rpy="1.57079 0.0 -6.123233995614214e-17"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.018 0.033 0.004"/>
+      </geometry>
+      <origin xyz="0.0 0.0 -0.0015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.004 0.02"/>
+      </geometry>
+      <origin xyz="0.0 -0.015 -0.013" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.004 0.02"/>
+      </geometry>
+      <origin xyz="0.0 0.015 -0.013" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="thumb_dip">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.038"/>
+      <inertia ixx="8.474e-06" ixy="2.41e-07" ixz="2.6e-08" iyy="3.841e-06" iyz="2.5e-08" izz="7.679e-06"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/thumb_dip.glb"/>
+      </geometry>
+      <origin xyz="0.0439 0.0579 -0.0086" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.02 0.04 0.024"/>
+      </geometry>
+      <origin xyz="0.0 0.0105 -0.014" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.02 0.004 0.032"/>
+      </geometry>
+      <origin xyz="0.0 0.031 -0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 0.042 0.001" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.014 0.02 0.004"/>
+      </geometry>
+      <origin xyz="0.0 0.042 -0.029" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.01 0.024 0.018"/>
+      </geometry>
+      <origin xyz="-0.0135 0.0175 -0.011656" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="thumb_fingertip">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+      <mass value="0.049"/>
+      <inertia ixx="2.0372e-05" ixy="-4.89e-07" ixz="-3e-08" iyy="4.336e-06" iyz="-9.7e-08" izz="1.9845e-05"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/thumb_fingertip.glb"/>
+      </geometry>
+      <origin xyz="0.0625 0.0784 0.0489" rpy="0.0 0.0 0.0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.02 0.036 0.024"/>
+      </geometry>
+      <origin xyz="0.0 -0.0085 -0.015" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.02 0.004 0.03"/>
+      </geometry>
+      <origin xyz="0.0 -0.029 -0.014" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.008 0.024 0.018"/>
+      </geometry>
+      <origin xyz="0.015 -0.0175 -0.0115" rpy="0.0 0.0 0.0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/collision/white_tip_thumb.obj"/>
+      </geometry>
+      <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    </collision>
+  </link>
+  <link name="thumb_tip_head"/>
+  <link name="index_tip_head"/>
+  <link name="middle_tip_head"/>
+  <link name="ring_tip_head"/>
+  <joint name="dummy_x_translation_joint" type="prismatic">
+    <parent link="dummy_x_translation_link"/>
+    <child link="dummy_y_translation_link"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="10" velocity="3.14" lower="-5" upper="5"/>
+  </joint>
+  <joint name="dummy_y_translation_joint" type="prismatic">
+    <parent link="dummy_y_translation_link"/>
+    <child link="dummy_z_translation_link"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="10" velocity="3.14" lower="-5" upper="5"/>
+  </joint>
+  <joint name="dummy_z_translation_joint" type="prismatic">
+    <parent link="dummy_z_translation_link"/>
+    <child link="dummy_x_rotation_link"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" velocity="3.14" lower="-5" upper="5"/>
+  </joint>
+  <joint name="dummy_x_rotation_joint" type="revolute">
+    <parent link="dummy_x_rotation_link"/>
+    <child link="dummy_y_rotation_link"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="10" velocity="3.14" lower="-6.283185307179586" upper="6.283185307179586"/>
+  </joint>
+  <joint name="dummy_y_rotation_joint" type="revolute">
+    <parent link="dummy_y_rotation_link"/>
+    <child link="dummy_z_rotation_link"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="10" velocity="3.14" lower="-6.283185307179586" upper="6.283185307179586"/>
+  </joint>
+  <joint name="dummy_z_rotation_joint" type="revolute">
+    <parent link="dummy_z_rotation_link"/>
+    <child link="base"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" velocity="3.14" lower="-6.283185307179586" upper="6.283185307179586"/>
+  </joint>
+  <joint name="base_joint" type="fixed">
+    <parent link="base"/>
+    <child link="palm_lower"/>
+    <origin xyz="0.0 0.038 0.098" rpy="0.0 -1.5707899999927801 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+  </joint>
+  <joint name="0" type="revolute">
+    <parent link="mcp_joint"/>
+    <child link="pip"/>
+    <origin xyz="-0.0122 0.0381 0.0145" rpy="-1.57079 0.0 1.57079"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-1.047" upper="1.047"/>
+  </joint>
+  <joint name="1" type="revolute">
+    <parent link="palm_lower"/>
+    <child link="mcp_joint"/>
+    <origin xyz="-0.007 0.023 -0.0187" rpy="1.5707899999903217 1.5707899999927806 -9.67825588725589e-12"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-0.314" upper="2.23"/>
+  </joint>
+  <joint name="2" type="revolute">
+    <parent link="pip"/>
+    <child link="dip"/>
+    <origin xyz="0.015 0.0143 -0.013" rpy="1.5707900000096782 -1.5707899999927801 -9.67825588725589e-12"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-0.506" upper="1.885"/>
+  </joint>
+  <joint name="3" type="revolute">
+    <parent link="dip"/>
+    <child link="fingertip"/>
+    <origin xyz="0.0 -0.0361 0.0002" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-0.366" upper="2.042"/>
+  </joint>
+  <joint name="4" type="revolute">
+    <parent link="mcp_joint_2"/>
+    <child link="pip_2"/>
+    <origin xyz="-0.0122 0.0381 0.0145" rpy="-1.57079 0.0 1.57079"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-1.047" upper="1.047"/>
+  </joint>
+  <joint name="5" type="revolute">
+    <parent link="palm_lower"/>
+    <child link="mcp_joint_2"/>
+    <origin xyz="-0.0071 -0.0224 -0.0187" rpy="1.5707899999903217 1.5707899999927806 -9.67825588725589e-12"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-0.314" upper="2.23"/>
+  </joint>
+  <joint name="6" type="revolute">
+    <parent link="pip_2"/>
+    <child link="dip_2"/>
+    <origin xyz="0.015 0.0143 -0.013" rpy="1.5707900000096782 -1.5707899999927801 -9.67825588725589e-12"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-0.506" upper="1.885"/>
+  </joint>
+  <joint name="7" type="revolute">
+    <parent link="dip_2"/>
+    <child link="fingertip_2"/>
+    <origin xyz="0.0 -0.0361 0.0002" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-0.366" upper="2.042"/>
+  </joint>
+  <joint name="8" type="revolute">
+    <parent link="mcp_joint_3"/>
+    <child link="pip_3"/>
+    <origin xyz="-0.0122 0.0381 0.0145" rpy="-1.57079 0.0 1.57079"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-1.047" upper="1.047"/>
+  </joint>
+  <joint name="9" type="revolute">
+    <parent link="palm_lower"/>
+    <child link="mcp_joint_3"/>
+    <origin xyz="-0.00709 -0.0678 -0.0187" rpy="1.5707899999903217 1.5707899999927806 -9.67825588725589e-12"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-0.314" upper="2.23"/>
+  </joint>
+  <joint name="10" type="revolute">
+    <parent link="pip_3"/>
+    <child link="dip_3"/>
+    <origin xyz="0.015 0.0143 -0.013" rpy="1.5707900000096782 -1.5707899999927801 -9.67825588725589e-12"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-0.506" upper="1.885"/>
+  </joint>
+  <joint name="11" type="revolute">
+    <parent link="dip_3"/>
+    <child link="fingertip_3"/>
+    <origin xyz="0.0 -0.03609 0.0002" rpy="0.0 0.0 0.0"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-0.366" upper="2.042"/>
+  </joint>
+  <joint name="12" type="revolute">
+    <parent link="palm_lower"/>
+    <child link="thumb_temp_base"/>
+    <origin xyz="-0.0693 -0.0012 -0.0216" rpy="0.0 1.5707899999927806 0.0"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-0.349" upper="2.094"/>
+  </joint>
+  <joint name="13" type="revolute">
+    <parent link="thumb_temp_base"/>
+    <child link="thumb_pip"/>
+    <origin xyz="0.0 0.0143 -0.013" rpy="1.5707900000096782 -1.5707899999927801 -9.67825588725589e-12"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-0.47" upper="2.443"/>
+  </joint>
+  <joint name="14" type="revolute">
+    <parent link="thumb_pip"/>
+    <child link="thumb_dip"/>
+    <origin xyz="0.0 0.0145 -0.017" rpy="-1.57079 0.0 6.123233995614214e-17"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-1.2" upper="1.9"/>
+  </joint>
+  <joint name="15" type="revolute">
+    <parent link="thumb_dip"/>
+    <child link="thumb_fingertip"/>
+    <origin xyz="0.0 0.0466 0.0002" rpy="0.0 0.0 3.14159"/>
+    <axis xyz="0.0 0.0 -1.0"/>
+    <limit effort="0.95" velocity="8.48" lower="-1.34" upper="1.88"/>
+  </joint>
+  <joint name="thumb_tip" type="fixed">
+    <parent link="thumb_fingertip"/>
+    <child link="thumb_tip_head"/>
+    <origin xyz="0.0 -0.06 -0.015" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+  </joint>
+  <joint name="index_tip" type="fixed">
+    <parent link="fingertip"/>
+    <child link="index_tip_head"/>
+    <origin xyz="0.0 -0.048 0.015" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+  </joint>
+  <joint name="middle_tip" type="fixed">
+    <parent link="fingertip_2"/>
+    <child link="middle_tip_head"/>
+    <origin xyz="0.0 -0.048 0.015" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+  </joint>
+  <joint name="ring_tip" type="fixed">
+    <parent link="fingertip_3"/>
+    <child link="ring_tip_head"/>
+    <origin xyz="0.0 -0.048 0.015" rpy="0.0 0.0 0.0"/>
+    <axis xyz="1.0 0.0 0.0"/>
+  </joint>
+</robot>
