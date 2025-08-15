@@ -75,4 +75,3 @@ visualize logic:
 - visualize robot mesh:
     - (line 108-113 in render_hand_object) first load robot (by dex-suite), then seq_qpos (implement by pk.chain), the calculate mesh.
     - robot urdf **do not** direct come from dex-suite, 6 dummy joints are added (this is what dex_retarget do), meaning xyzrpy. qpos=3+3+joint_angle.
-

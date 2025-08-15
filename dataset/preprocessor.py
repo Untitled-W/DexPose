@@ -782,6 +782,8 @@ if __name__ == "__main__":
 
     # dataset_names = ['taco', 'dexycb',  'oakinkv2']
     dataset_names = ['taco']
+    # dataset_names = ['dexycb']
+    # dataset_names = ['oakinkv2']
     processed_data = []
     
     GENERATE = True

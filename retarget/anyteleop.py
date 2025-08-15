@@ -41,7 +41,7 @@ DATASET_CONFIGS = {
         'save_path': DEX_SEQ_PATH['Oakinkv2'],
         'task_interval': 20,
         'which_dataset': 'Oakinkv2',
-        'seq_data_name': 'retarget',
+        'seq_data_name': 'debug',
         'sequence_indices': list(range(0, 1))  # Example sequence indices for processing
     },
     
@@ -51,8 +51,8 @@ DATASET_CONFIGS = {
         'save_path': DEX_SEQ_PATH['Taco'],
         'task_interval': 1,
         'which_dataset': 'Taco',
-        'seq_data_name': 'retarget',
-        'sequence_indices': list(range(0, 1))  # Example sequence indices for processing
+        'seq_data_name': 'debug',
+        # 'sequence_indices': list(range(0, 10))  # Example sequence indices for processing
     },
 
     'dexycb': {
@@ -61,7 +61,7 @@ DATASET_CONFIGS = {
         'save_path': DEX_SEQ_PATH['DexYCB'],
         'task_interval': 1,
         'which_dataset': 'DexYCB',
-        'seq_data_name': 'retarget',
+        'seq_data_name': 'debug',
         'sequence_indices': list(range(0, 1))  # Example sequence indices for processing
     }
 }
@@ -84,8 +84,11 @@ def main_retarget(dataset_names: List[str], robots: List[RobotName]):
         file_path = os.path.join(DATASET_CONFIGS[dataset_name]['load_path'],f'seq_{DATASET_CONFIGS[dataset_name]["seq_data_name"]}_{DATASET_CONFIGS[dataset_name]["task_interval"]}.p')
         with open(file_path, 'rb') as f:
             load_data = pickle.load(f)
+        sequence_indices = DATASET_CONFIGS[dataset_name].get('sequence_indices')
+        sequence_indices = sequence_indices if sequence_indices is not None else list(range(len(load_data)))
+        print(sequence_indices)
 
-        for idx in tqdm(DATASET_CONFIGS[dataset_name]['sequence_indices'], desc=f"Processing {dataset_name}"):
+        for idx in tqdm(sequence_indices, desc=f"Processing {dataset_name}"):
             sampled_data = load_data[idx]
             hand_side = HandType.right if sampled_data.side == 1 else HandType.left
             if hand_side == HandType.left: continue
@@ -104,13 +107,13 @@ def main_retarget(dataset_names: List[str], robots: List[RobotName]):
 def save_results(dex_data: List[DexSequenceData]):
     dataset_data = {}
     for data in dex_data:
-        name = data.which_dataset.lower() + "_" + data.which_hand
+        name = data["which_dataset"].lower() + "-" + data["which_hand"]
         if name not in dataset_data:
             dataset_data[name] = []
         dataset_data[name].append(data)
 
     for name, data_list in dataset_data.items():
-        dataset_name, robot_name = name.split("_")
+        dataset_name, robot_name = name.split("-")
         save_path = DATASET_CONFIGS[dataset_name]['save_path']
         if not os.path.exists(save_path):
             os.makedirs(save_path)
@@ -128,7 +131,7 @@ def check_data_correctness_by_vis(dex_data: List[DexSequenceData]):
     
     dataset_data = {}
     for data in dex_data:
-        name = data.which_dataset + "_" + data.which_hand
+        name = data['which_dataset'] + "_" + data['which_hand']
         if name not in dataset_data:
             dataset_data[name] = []
         dataset_data[name].append(data)
@@ -139,19 +142,21 @@ def check_data_correctness_by_vis(dex_data: List[DexSequenceData]):
         sampled_data = data_list
         # sampled_data = random.sample(data_list, 2)
         for d in sampled_data:
-            print(f"Visualizing sequence {d.which_sequence}")
-            visualize_dex_hand_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/retarget/vis_results/{d.which_hand}_{d.which_dataset}_{d.which_sequence}.html')
-
-
+            print(f"Visualizing sequence {d['which_sequence']}")
+            visualize_dex_hand_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/retarget/vis_results/debug_{d["which_hand"]}_{d["which_dataset"]}_{d["which_sequence"]}_{d["side"]}.html')
+            # with open(f'./qpos.txt', 'w') as f:
+            #     for t in range(d['hand_poses'].shape[0]):
+            #         f.write(f"Time step {t}:\n")
+            #         f.write(str(d['hand_poses'][t].cpu().numpy().astype(np.float32)))
+            #         f.write("\n\n")
 
 if __name__ == "__main__":
 
+    # dataset_names = ['dexycb', 'taco', 'oakinkv2']
     dataset_names = ['taco']
-    # robots = [RobotName.allegro, RobotName.shadow, RobotName.leap]
-    robots = [RobotName.inspire]
-    # robot_dir = (
-    #     Path("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets").absolute() / "robots" / "hands"
-    # )
+
+    robots = [RobotName.shadow, ]# RobotName.allegro, RobotName.leap, RobotName.inspire]
+
     robot_dir = (
         Path("/home/qianxu/Project25/DexPose/thirdparty/dex-retargeting/assets").absolute() / "robots" / "hands"
     )
@@ -161,7 +166,7 @@ if __name__ == "__main__":
     GENERATE = True
     if GENERATE:
         processed_data = main_retarget(dataset_names, robots)
-        # save_results(processed_data)
+        save_results(processed_data)
     else:
         for dataset_name in dataset_names:
             for robot in robots:
@@ -176,4 +181,4 @@ if __name__ == "__main__":
 
     # show_human_statistics(processed_data)
     
-    check_data_correctness_by_vis(processed_data)
+    # check_data_correctness_by_vis(processed_data)
