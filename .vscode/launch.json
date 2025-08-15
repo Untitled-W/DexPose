@@ -5,8 +5,6 @@
     "version": "0.2.0",
     "configurations": [
 
-
-
         {
             "name": "log vis",
             "type": "debugpy",
@@ -28,6 +26,12 @@
             "request": "launch",
             "module": "dataset.preprocessor"
         },
-
+        {
+            "name": "Run Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
     ]
 }

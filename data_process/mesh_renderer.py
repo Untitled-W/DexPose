@@ -183,6 +183,8 @@ class MeshRenderer3D:
         else:
             # Add default vertex colors if no textures are available
             self._add_default_vertex_colors(verts)
+        
+        return verts
 
     def _calculate_optimal_camera_distance(self, fov: float = 60.0, coverage_ratio: float = 0.8) -> float:
         """
@@ -370,7 +372,7 @@ class MeshRenderer3D:
             image_size=image_size,
             blur_radius=0.0,
             faces_per_pixel=1,
-            max_faces_per_bin=20000
+            max_faces_per_bin=40000
         )
         
         # Setup improved lighting

@@ -418,7 +418,6 @@ class TACOProcessor(BaseDatasetProcessor):
 
         return hand_trans[frame_indices], hand_thetas[frame_indices], hand_joints[frame_indices]
     
-
     def _get_object_info(self, raw_data: Dict[str, Any], frame_indices: List[int]) -> Tuple[List[torch.Tensor], List[str]]:
         """Load TACO object data"""
         obj_name = raw_data['obj_name']
@@ -755,9 +754,6 @@ def show_human_statistics(human_data: List[HumanSequenceData]):
     plt.show()
 
     print()
-
-
-
 
 def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
     """
