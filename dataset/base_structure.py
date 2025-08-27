@@ -13,9 +13,9 @@ from manotorch.manolayer import ManoLayer
 from utils.vis_utils import vis_pc_coor_plotly
 from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate_feature, get_contact_pts, find_longest_false_substring, from_hand_rot6d, to_hand_rot6d, matrix_to_rotation_6d
 from pytorch3d.transforms import matrix_to_axis_angle, axis_angle_to_matrix, quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
+import joblib
 
-
-WMQ_IS_USING = True
+WMQ_IS_USING = False
 
 if WMQ_IS_USING:
 
@@ -163,15 +163,15 @@ class BaseDatasetProcessor(ABC):
 
         self.texture_prompts = [
             "a [object] covered in knitted wool texture, studio lighting, high detail",
-            "a [object] made of smooth polished marble, studio lighting, high detail",
-            "a [object] coated in cracked dry clay, studio lighting, high detail",
-            "a [object] wrapped in glossy plastic foil, studio lighting, high detail",
-            "a [object] textured with brushed metal surface, studio lighting, high detail",
-            "a [object] covered in colorful mosaic tiles, studio lighting, high detail",
-            "a [object] made of translucent frosted glass, studio lighting, high detail",
-            "a [object] covered in moss and natural textures, studio lighting, high detail",
-            "a [object] wrapped in denim fabric, studio lighting, high detail",
-            "a [object] coated in shiny glazed ceramic, studio lighting, high detail"
+            # "a [object] made of smooth polished marble, studio lighting, high detail",
+            # "a [object] coated in cracked dry clay, studio lighting, high detail",
+            # "a [object] wrapped in glossy plastic foil, studio lighting, high detail",
+            # "a [object] textured with brushed metal surface, studio lighting, high detail",
+            # "a [object] covered in colorful mosaic tiles, studio lighting, high detail",
+            # "a [object] made of translucent frosted glass, studio lighting, high detail",
+            # "a [object] covered in moss and natural textures, studio lighting, high detail",
+            # "a [object] wrapped in denim fabric, studio lighting, high detail",
+            # "a [object] coated in shiny glazed ceramic, studio lighting, high detail"
         ]
 
     @staticmethod
@@ -319,6 +319,7 @@ class BaseDatasetProcessor(ABC):
             'seq_len': data_dict['seq_len'],
             'which_dataset': data_dict['which_dataset'],
             'which_sequence': data_dict['which_sequence'],
+            'uid': data_dict['uid'],
         }
         return data_dict_m
 
@@ -400,7 +401,7 @@ class BaseDatasetProcessor(ABC):
             ).to(torch.float32)
         return yup2xup
 
-    def process_sequence(self, raw_data: Dict[str, Any], side: str) -> Optional[HumanSequenceData]:
+    def process_sequence(self, raw_data: Dict[str, Any], side: str, uid:int=0, save_fature=False) -> Optional[HumanSequenceData]:
         
         """Process a single sequence into standardized format."""
         
@@ -435,7 +436,7 @@ class BaseDatasetProcessor(ABC):
         ### get camera orientation
         
         for obj_part_idx, object_mesh_path in enumerate(object_mesh_path_ls):
-            self.renderer.load_mesh(object_mesh_path, scale=0.01)
+            verts = self.renderer.load_mesh(object_mesh_path, scale=0.01)
             elev, azim = self.orientation_to_elev_azim(orientation)
             camera_params = [
                 {'elev': elev, 'azim':  azim, 'fov': 60},     # hand orientation
@@ -448,9 +449,12 @@ class BaseDatasetProcessor(ABC):
             self.renderer.extract_features(prompt=f"a {object_name}", w_aug_texture=True)
             rgbs, depths, masks, points_ls, features = self.renderer.get_rendered_data() # features: (num_views, num_texture, feature_dim, height, width)
             all_points_dff, all_features_dff = get_multiview_dff(points_ls, masks, features,
-                                                    n_points=1000) 
+                                                n_points=1000) 
             
-            ### get the contact timesteps
+            ### get contact point indices
+            obj_points_trans_ori = apply_transformation_pt(all_points_dff, obj_transf_ls[obj_part_idx])
+            hand_key_joints = get_key_hand_joints(hand_joints)
+            hand_key_features = intepolate_feature(hand_key_joints, all_features_dff[0], obj_points_trans_ori)
             distance = torch.norm(hand_key_joints[..., None, :] - obj_points_trans_ori[..., None, :, :], dim=-1, p=2)
             min_dis, min_dis_idx = torch.min(distance, dim=-1)
             untouch_mask = torch.min(min_dis, dim=-1)[0] > 0.02
@@ -463,13 +467,7 @@ class BaseDatasetProcessor(ABC):
             if end_idx - start_idx <= 30:
                 logging.warning(f"Sequence {raw_data['which_sequence']} on side {side} has too few frames: {end_idx - start_idx}. Skipping.")
                 return None
-            ### get the contact timesteps
-            
-            ### get contact point indices
-            obj_points_trans_ori = apply_transformation_pt(all_points_dff, obj_transf_ls[obj_part_idx])
-            hand_key_joints = get_key_hand_joints(hand_joints)
-            hand_key_features = intepolate_feature(hand_key_joints, all_features_dff[0], obj_points_trans_ori)
-            contact_indices = get_contact_pts(all_points_dff, all_features_dff[0], hand_key_features, n_pts=100 // len(object_mesh_path_ls))
+            contact_indices = get_contact_pts(all_points_dff, all_features_dff[0], hand_key_features[start_idx:end_idx], n_pts=100 // len(object_mesh_path_ls))
             ### get contact point indices
 
             object_points_ls.append(all_points_dff)
@@ -478,31 +476,40 @@ class BaseDatasetProcessor(ABC):
         contact_indices = torch.cat(contact_indices_ls, dim=-1)
         ### render & feature & contact points
         
+        if save_fature:
+            feature_store_path = os.path.join(os.path.dirname(self.seq_save_path), 'feature')
+            if not os.path.exists(feature_store_path):
+                os.makedirs(feature_store_path)
+            torch.save(object_features_ls[0].cpu(), os.path.join(feature_store_path, f'{uid}.pth'))
+
         ### Return KEYS
         r_side = 'l' if side == 'r' else 'r'
         hand_thetas_rot6d = matrix_to_rotation_6d(quaternion_to_matrix(hand_coeffs))
+        assert end_idx - start_idx == contact_indices.shape[0], \
+            f"Mismatch in sequence length: {end_idx - start_idx} vs {contact_indices.shape[0]}"
         sequence_data = {
             f'{side}h_joints': hand_joints.cpu()[start_idx:end_idx], # (T, 21, 3)
             f'{side}o_transf': obj_transf_ls[0][start_idx:end_idx].cpu(), # [(T, 4, 4), ...]
             f'{side}o_points': object_points_ls[0].cpu(), # [(N_points, 3), ...]
-            f'{side}o_features': object_features_ls[0].cpu(), # [(N_textures, N_points, d), ...]
+            # f'{side}o_features': object_features_ls[0].cpu(), # [(N_textures, N_points, d), ...]
             f'{side}h_params': torch.cat([hand_thetas_rot6d.flatten(-2, -1), hand_tsl], dim=-1).cpu()[start_idx:end_idx], # (T, 99)
             f'{side}o_normals': None,  # Placeholder for normals if not available
 
             f'{r_side}h_joints': None,
             f'{r_side}o_transf': None,
             f'{r_side}o_points': None,
-            f'{r_side}o_features': None,
+            # f'{r_side}o_features': None,
             f'{r_side}h_params': None,
             f'{r_side}o_normals': None,  # Placeholder for normals if not available
 
-            'contact_indices': contact_indices.cpu()[start_idx:end_idx],
+            'contact_indices': contact_indices.cpu(),
             'mesh_path': object_mesh_path_ls,
             'side': 1 if side == 'r' else 0,  # 1 for right, 0 for left
             'task_desc': self._get_task_description(raw_data),
-            'seq_len': len(frame_indices),
+            'seq_len': hand_joints.shape[0],
             'which_dataset': raw_data['which_dataset'],
             'which_sequence': raw_data['which_sequence'],
+            'uid': uid,
         }
         if side == 'l':
             sequence_data = self.mirror_data(sequence_data, side)
@@ -528,23 +535,6 @@ class BaseDatasetProcessor(ABC):
         # #### DEBUG CODE
 
         return sequence_data
-        
-        # sequence_data = HumanSequenceData(
-        #     hand_tsls=hand_tsl.cpu(),
-        #     hand_coeffs=hand_coeffs.cpu(),
-        #     side=1 if side == 'r' else 0,
-        #     obj_poses=torch.stack(obj_transf_ls).cpu(),
-        #     object_names=object_name_ls,
-        #     object_mesh_path=object_mesh_path_ls,
-        #     object_points_ls = object_points_ls,
-        #     object_features_ls = object_features_ls,
-            
-        #     frame_indices=frame_indices,
-        #     which_dataset=raw_data['which_dataset'],
-        #     which_sequence=raw_data['which_sequence'],
-        #     task_description=self._get_task_description(raw_data),
-        #     extra_info=raw_data.get('extra_info', {}),
-        # )
 
     def process_all_sequences(self, sequence_indices: List[int]) -> List[Dict[str, Any]]:
 
@@ -552,28 +542,38 @@ class BaseDatasetProcessor(ABC):
         whole_data_ls = []
         bad_seq_num = 0
         
-        # 
+        uid = 0
+        erro_n = 0
+        if os.path.isfile(self.seq_save_path):
+            whole_data_ls = joblib.load(self.seq_save_path)
+        else:
+            whole_data_ls = []
         for idx in tqdm(sequence_indices, desc=f"Processing {self.which_dataset}-{self.seq_data_name}"):
-            if idx < 4:
-                print(f"Skipping index {idx} for debugging purposes.")
-                continue
             data_item = self.data_ls[idx]
             sequence_list = self._load_sequence_data(data_item) 
             
             for seq_data in sequence_list:
                 for side in ['l', 'r']:
                     if seq_data.get(f'{side}_valid', True):  # Check if this side has valid data
-
+                        uid += 1
+                        # if uid < 683:
+                        #     continue
                         print(f"Processing {idx}: {seq_data['which_dataset']}-{seq_data['which_sequence']} on side {side}")
-                        # try:
-                        processed_seq = self.process_sequence(seq_data, side)
+                        processed_seq = self.process_sequence(seq_data, side, uid)
                         if processed_seq is not None: 
                             logging.info(f"Item {len(whole_data_ls):<4}: index {idx}, {seq_data['which_dataset']}-{seq_data['which_sequence']} from side {side}, len {processed_seq['seq_len']}")
                             whole_data_ls.append(copy.deepcopy(processed_seq))
-                        # except Exception as e:
-                        #     logging.error(f"Error processing {idx}: {seq_data['which_dataset']}-{seq_data['which_sequence']} on side {side}: {e}")
-                        #     bad_seq_num += 1
-
+                            
+                            with open(self.seq_save_path, 'wb') as ofs:
+                                joblib.dump(whole_data_ls, ofs)
+                            print("####################")
+                            print(f"Processed UID {uid} sequences, {len(whole_data_ls)} saved")
+                            print("####################")
+                        else:
+                            erro_n += 1
+                            print("####################")
+                            print(f"Error rate: {erro_n}/{uid} = {erro_n/uid:.2%}")
+                            print("####################")
         
         logging.info(f"Processed {len(whole_data_ls)} sequences, {bad_seq_num} failed")
         return whole_data_ls

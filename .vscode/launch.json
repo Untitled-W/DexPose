@@ -38,6 +38,12 @@
             "request": "launch",
             "module": "dataset.preprocessor"
         },
-
+        {
+            "name": "Run Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
     ]
 }

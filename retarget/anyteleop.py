@@ -158,7 +158,7 @@ if __name__ == "__main__":
     robots = [RobotName.allegro, RobotName.leap, RobotName.inspire, ] #RobotName.shadow, ]
 
     robot_dir = (
-        Path("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets").absolute() / "robots" / "hands"
+        Path("/home/qianxu/Project25/DexPose/thirdparty/dex-retargeting/assets").absolute() / "robots" / "hands"
     )
     RetargetingConfig.set_default_urdf_dir(robot_dir)
     processed_data = []
