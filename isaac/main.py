@@ -192,10 +192,10 @@ def create_env(dex_seq_data: dict):
 if __name__ == "__main__":
     
     # Example dex_seq_data dictionary
-    with open("/home/qianxu/Desktop/Project/DexPose/data/Taco/dex_save/seq_shadow_hand_debug_1.p", "rb") as f:
+    with open("/home/qianxu/Desktop/Project/DexPose/data/Taco/dex_save/seq_inspire_hand_debug_1.p", "rb") as f:
         load_data = pickle.load(f)
 
-    dex_seq_data = load_data[6]
+    dex_seq_data = load_data[0]
 
     print(dex_seq_data['which_hand'], dex_seq_data['which_dataset'], dex_seq_data['which_sequence'], dex_seq_data['side'])
 
@@ -219,7 +219,7 @@ if __name__ == "__main__":
     pk_name_to_idx = {}
     for idx, name in enumerate(robot.joints_names):
         pk_name_to_idx[name] = idx
-    print("PK DOF names:", pk_name_to_idx)
+    # print("PK DOF names:", pk_name_to_idx)
 
     # remap pk_hand_qpos to isaacgym
     hand_qpos = np.zeros((T, gym.get_actor_dof_count(env, hand_actor)), dtype=np.float32)
@@ -227,23 +227,23 @@ if __name__ == "__main__":
         isaac_idx = isaac_name_to_idx[pk_name]
         hand_qpos[:, isaac_idx] = pk_hand_qpos[:, pk_idx]
 
-    ### Make hand tighter
-    actions_extend = np.copy(hand_qpos)
-    positive_number = 0.0
-    ## FFJ 4 3 2 1
-    actions_extend[:, 8:12] += np.array([0, positive_number, positive_number, positive_number]).astype(np.float32)
-    ### LFJ 5 4 3 2 1
-    actions_extend[:, 20:25] += np.array([positive_number, 0, positive_number, positive_number, positive_number]).astype(np.float32)
-    ### MFJ 4 3 2 1
-    actions_extend[:, 12:16] += np.array([0, positive_number, positive_number, positive_number]).astype(np.float32)
-    ### RFJ 4 3 2 1
-    actions_extend[:, 16:20] += np.array([0, positive_number, positive_number, positive_number]).astype(np.float32)
-    ### THJ 5 4 3 2 1
-    actions_extend[:, 25:30] += np.array([positive_number, positive_number, positive_number, positive_number, positive_number]).astype(np.float32)
+    # ### Make hand tighter
+    # actions_extend = np.copy(hand_qpos)
+    # positive_number = 0.0
+    # ## FFJ 4 3 2 1
+    # actions_extend[:, 8:12] += np.array([0, positive_number, positive_number, positive_number]).astype(np.float32)
+    # ### LFJ 5 4 3 2 1
+    # actions_extend[:, 20:25] += np.array([positive_number, 0, positive_number, positive_number, positive_number]).astype(np.float32)
+    # ### MFJ 4 3 2 1
+    # actions_extend[:, 12:16] += np.array([0, positive_number, positive_number, positive_number]).astype(np.float32)
+    # ### RFJ 4 3 2 1
+    # actions_extend[:, 16:20] += np.array([0, positive_number, positive_number, positive_number]).astype(np.float32)
+    # ### THJ 5 4 3 2 1
+    # actions_extend[:, 25:30] += np.array([positive_number, positive_number, positive_number, positive_number, positive_number]).astype(np.float32)
 
-    hand_qpos = np.copy(actions_extend)
+    # hand_qpos = np.copy(actions_extend)
 
-    SIM = True
+    SIM = False
 
     _root_tensor = gym.acquire_actor_root_state_tensor(sim)
     root_tensor = gymtorch.wrap_tensor(_root_tensor)  
@@ -269,7 +269,7 @@ if __name__ == "__main__":
 
             for k in range(K):
                 actor_idx = 1 + k
-                root_tensor_cpu[actor_idx, 0:3] = ts[k] + torch.tensor([0.02, -0.01, 0.03], device=ts.device)  # Offset the object position slightly above the ground
+                root_tensor_cpu[actor_idx, 0:3] = ts[k] # + torch.tensor([0.02, -0.01, 0.03], device=ts.device)  # Offset the object position slightly above the ground
                 root_tensor_cpu[actor_idx, 3:7] = quats[k]
                 root_tensor_cpu[actor_idx, 7:13] = 0 
 

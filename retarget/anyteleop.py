@@ -52,7 +52,7 @@ DATASET_CONFIGS = {
         'task_interval': 1,
         'which_dataset': 'Taco',
         'seq_data_name': 'debug',
-        # 'sequence_indices': list(range(0, 10))  # Example sequence indices for processing
+        'sequence_indices': list(range(100, 110))  # Example sequence indices for processing
     },
 
     'dexycb': {
@@ -155,7 +155,7 @@ if __name__ == "__main__":
     # dataset_names = ['dexycb', 'taco', 'oakinkv2']
     dataset_names = ['taco']
 
-    robots = [RobotName.shadow, ]# RobotName.allegro, RobotName.leap, RobotName.inspire]
+    robots = [RobotName.allegro, RobotName.leap, RobotName.inspire, ] #RobotName.shadow, ]
 
     robot_dir = (
         Path("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets").absolute() / "robots" / "hands"

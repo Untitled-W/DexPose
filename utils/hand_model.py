@@ -29,7 +29,7 @@ class HandModelURDF:
             urdf_path = f'robot_models/{robot_name}.urdf'
             
         self.chain = pk.build_chain_from_urdf(open(urdf_path, "rb").read()).to(dtype=torch.float, device=self.device)
-        print("n-DoF:", len(self.chain.get_joint_parameter_names()))
+        # print("n-DoF:", len(self.chain.get_joint_parameter_names()))
         self.n_dofs = len(self.chain.get_joint_parameter_names())
         
         self.mesh = {}
@@ -141,12 +141,12 @@ class HandModelURDF:
         
         set_joint_range_recurse(self.chain._root)
 
-        # Print the name of each hand DOF index
-        print("Hand DOF names:")
-        for idx, name in enumerate(self.joints_names):
-                print(f"Index {idx}: {name}")
-                print(f"Lower limit: {self.joints_lower[idx].item()}")
-                print(f"Upper limit: {self.joints_upper[idx].item()}")
+        # # Print the name of each hand DOF index
+        # print("Hand DOF names:")
+        # for idx, name in enumerate(self.joints_names):
+        #         print(f"Index {idx}: {name}")
+        #         print(f"Lower limit: {self.joints_lower[idx].item()}")
+        #         print(f"Upper limit: {self.joints_upper[idx].item()}")
 
         self.joints_lower = torch.stack(
             self.joints_lower).float().to(self.device)
