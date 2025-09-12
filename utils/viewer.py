@@ -167,15 +167,15 @@ class HandDatasetSAPIENViewer:
             self.internal_scene.remove_node(node)
 
     def load_object_hand_dex(self, data: Union[HumanSequenceData, DexSequenceData]):
-        data_ids = data.object_names
-        mesh_files = data.object_mesh_path
+        data_ids = data["object_names"]
+        mesh_files = data["object_mesh_path"]
         for data_id, mesh_file in zip(data_ids, mesh_files):
             self._load_object(data_id, mesh_file)
 
         self.mano_face = ManoLayer(
             flat_hand_mean=False,
             ncomps=45,
-            side="left" if data.side == 0 else "right",
+            side="left" if data["side"] == 0 else "right",
             use_pca=True,
         ).th_faces.cpu().numpy()
 
@@ -206,6 +206,7 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
         self,
         robot_names: List[RobotName],
         hand_type: HandType,
+        optimizer_type='position',
         headless=False,
         use_ray_tracing=False,
     ):
@@ -218,6 +219,7 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
         self.retarget2sapien: List[np.ndarray] = []
         self.retarget2pk: List[np.ndarray] = []
         self.hand_type = hand_type
+        self.optimizer_type = optimizer_type
 
         # Load optimizer and filter
         loader = self.scene.create_urdf_loader()
@@ -225,11 +227,11 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
         loader.load_multiple_collisions_from_file = True
         for robot_name in robot_names:
             config_path = get_default_config_path(
-                robot_name, RetargetingType.position, hand_type
+                robot_name, RetargetingType.position_pc, hand_type
             )
 
             # Add 6-DoF dummy joint at the root of each robot to make them move freely in the space
-            override = dict(add_dummy_free_joint=True)
+            override = dict(add_dummy_free_joint=True, type=optimizer_type)
             config = RetargetingConfig.load_from_file(config_path, override=override)
             retargeting = config.build()
             robot_file_name = Path(config.urdf_path).stem
@@ -247,8 +249,8 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             temp_path = 'retarget/urdf/' + urdf_name
             if not os.path.exists('retarget/urdf'):
                 os.makedirs('retarget/urdf')
-            robot_urdf.write_xml_file(temp_path)
-            print(temp_path)
+                robot_urdf.write_xml_file(temp_path)
+            print("Viewer:", temp_path)
 
             robot = loader.load(temp_path)
             self.robots.append(robot)
@@ -268,8 +270,8 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
 
     def load_object_hand_dex(self, data: Union[HumanSequenceData, DexSequenceData]):
         super().load_object_hand_dex(data)
-        data_ids = data.object_names
-        mesh_files = data.object_mesh_path
+        data_ids = data["object_names"]
+        mesh_files = data["object_mesh_path"]
 
         # Load the same YCB objects for n times, n is the number of robots
         # So that for each robot, there will be an identical set of objects
@@ -410,7 +412,7 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             self.camera.set_local_pose(local_pose)
 
         # from 4 x 4 matrix to 7D vector
-        object_pose = data.obj_poses  # N x T x 4 x 4
+        object_pose = data["obj_poses"]  # N x T x 4 x 4
         object_tsl = object_pose[..., :3, 3]  # N x T x 3
         object_quat = matrix_to_quaternion(object_pose[..., :3, :3])
         # from xyzw to wxyz
@@ -419,7 +421,7 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
 
         num_frame = object_pose.shape[1]
         num_copy = len(self.robots) + 1
-        num_ycb_objects = len(data.object_names)
+        num_ycb_objects = len(data["object_names"])
         pose_offsets = []
 
         for i in range(len(self.robots) + 1):
@@ -433,9 +435,9 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
 
         start_frame = 0
         # Warm start
-        joints, vertex = extract_hand_points_and_mesh(data.hand_tsls[start_frame], data.hand_coeffs[start_frame], data.side)
+        joints, vertex = extract_hand_points_and_mesh(data["hand_tsls"][start_frame], data["hand_coeffs"][start_frame], data["side"])
         joints = joints.squeeze(0)
-        wrist_quat = data.hand_coeffs[start_frame, 0]
+        wrist_quat = data["hand_coeffs"][start_frame, 0]
 
         for robot, retargeting, retarget2sapien in zip(
             self.robots, self.retargetings, self.retarget2sapien
@@ -447,10 +449,14 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 is_mano_convention=True,
             )
 
+        from utils.tools import get_point_clouds_from_human_data, apply_transformation_human_data
+        pc, pc_norm = get_point_clouds_from_human_data(data, return_norm=True)
+        pc_ls, pc_norm_ls = apply_transformation_human_data(pc, data["obj_poses"], norm=pc_norm)
+
         # Loop rendering
         for i in trange(start_frame, num_frame):
             object_pose_frame = object_pose[:, i, ...]
-            joints, vertex = extract_hand_points_and_mesh(data.hand_tsls[i], data.hand_coeffs[i], data.side)
+            joints, vertex = extract_hand_points_and_mesh(data["hand_tsls"][i], data["hand_coeffs"][i], data["side"])
             joints = joints.squeeze(0)
             vertex = vertex.squeeze(0)
 
@@ -480,6 +486,7 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 indices = retargeting.optimizer.target_link_human_indices
                 ref_value = joints[indices, :]
                 # print("Frame:", i, "Ref value:", ref_value)
+                retargeting.set_pc(pc_ls[i], pc_norm_ls[i])
                 qpos_retarget = retargeting.retarget(ref_value)
                 qpos_sapien = qpos_retarget[retarget2sapien]
                 qpos_pk = qpos_retarget[retarget2pk]
@@ -487,6 +494,16 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 # print("Frame:", i, "Qpos PK:", qpos_pk)
                 robot.set_qpos(qpos_sapien)
                 qpos_dict[robot_name].append(qpos_pk.copy())
+
+                # if i == 30:
+                #     from .vis_utils import vis_pc_coor_plotly
+                #     vis_pc_coor_plotly(pc_ls=[pc_ls[i]], 
+                #                        posi_pts_ls=[retargeting.optimizer.robot.get_penetration_keypoints().detach().cpu().numpy()],
+                #                        hand_mesh=retargeting.optimizer.robot.get_trimesh_data(), 
+                #                        obj_norm_ls=[pc_norm_ls[i]],
+                #                        filename="xxx_0")
+                    
+                #     import sys; sys.exit(0)
 
         # Save qpos to disk as npy files
         # save_dir = Path('retarget/hand_qpos')
@@ -499,22 +516,24 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
             retargeted_data.append(dict(
                 which_hand=robot_name_str,
                 hand_poses=qpos_arr,
-                side=data.side,
+                side=data["side"],
 
-                hand_tsls=data.hand_tsls,
-                hand_coeffs=data.hand_coeffs,
+                hand_tsls=data["hand_tsls"],
+                hand_coeffs=data["hand_coeffs"],
+                # hand_joints=data["hand_joints"],
 
-                obj_poses=data.obj_poses,
+                obj_poses=data["obj_poses"],
                 obj_point_clouds=None,
                 obj_feature=None,
-                object_names=data.object_names,
-                object_mesh_path=data.object_mesh_path,
+                object_names=data["object_names"],
+                object_mesh_path=data["object_mesh_path"],
+                # mesh_norm_trans=data["mesh_norm_trans"],
 
-                frame_indices= data.frame_indices,
-                task_description=data.task_description,
-                which_dataset=data.which_dataset,
-                which_sequence=data.which_sequence,
-                extra_info=data.extra_info
+                frame_indices=data["frame_indices"],
+                task_description=data["task_description"],
+                which_dataset=data["which_dataset"],
+                which_sequence=data["which_sequence"],
+                extra_info=data["extra_info"]
             ))
 
             # print("QPOS:")

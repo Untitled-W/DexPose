@@ -4,7 +4,7 @@ vis_results
 *_old
 wandb
 
-ObjDexEnvs
+0912_ignore
 *.zip
 *.pth
 

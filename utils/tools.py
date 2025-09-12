@@ -395,6 +395,22 @@ def pt_transform(points, transformation):
     transformed_points = (transformation @ points_homogeneous.T).T
     return transformed_points[:, :3]
 
+def norm_transform(normals: np.ndarray, transformation: np.ndarray) -> np.ndarray:
+    """
+    对一组3D法向量（或任何方向向量）应用一个4x4变换矩阵的旋转部分。
+    """
+    # 提取3x3的旋转矩阵
+    rotation_matrix = transformation[:3, :3]
+    # 应用旋转
+    transformed_normals = normals @ rotation_matrix.T
+    
+    # (可选但推荐) 重新归一化法向量，以防旋转操作引入浮点误差
+    norms = np.linalg.norm(transformed_normals, axis=1, keepdims=True)
+    # 避免除以零
+    safe_norms = np.where(norms == 0, 1, norms)
+    
+    return transformed_normals / safe_norms
+
 
 def get_point_clouds_from_dexycb(data: dict):
     ycb_mesh_files = data["object_mesh_file"] # a list of .obj file path
@@ -413,35 +429,267 @@ def get_point_clouds_from_dexycb(data: dict):
     return pc_ds[0] # only 1 object in the dataset
 
 
-def get_point_clouds_from_human_data(seq_data, ds_num=1000):
-    obj_mesh = []
-    for mesh_path in seq_data["object_mesh_path"]:
-        obj_mesh.append(o3d.io.read_triangle_mesh(mesh_path))
-    original_pc = [np.asarray(mesh.vertices) for mesh in obj_mesh if mesh is not None]
+# def get_point_clouds_from_human_data(seq_data, ds_num=1000):
+#     obj_mesh = []
+#     for mesh_path in seq_data["object_mesh_path"]:
+#         obj_mesh.append(o3d.io.read_triangle_mesh(mesh_path))
+#     original_pc = [np.asarray(mesh.vertices) for mesh in obj_mesh if mesh is not None]
 
+#     original_pc_ls = [
+#             farthest_point_sampling(torch.from_numpy(points).unsqueeze(0), ds_num)[:ds_num]  for points in original_pc
+#         ]
+#     pc_ds = [pc[pc_idx] for pc, pc_idx in zip(original_pc, original_pc_ls)]
+
+#     if seq_data["which_dataset"].lower() == 'taco':
+#         for i in range(len(pc_ds)):
+#             pc_ds[i] *= 0.01
+
+#     return pc_ds
+
+
+import open3d as o3d
+from typing import List, Dict, Any
+
+def get_object_meshes_from_human_data(seq_data: Dict[str, Any]) -> List[o3d.geometry.TriangleMesh]:
+    """
+    从序列数据中加载对象网格。
+    
+    特别处理：如果数据集是 'taco'，则将网格缩小1000倍，
+    因为TACO数据集的单位通常是毫米（mm），而其他数据集是米（m）。
+
+    Args:
+        seq_data: 包含序列信息的字典，应有 "object_mesh_path" 和 "which_dataset" 键。
+
+    Returns:
+        一个包含加载并经过适当缩放的 o3d.geometry.TriangleMesh 对象的列表。
+    """
+    obj_meshes = []
+    
+    # 检查数据集是否为 'taco'
+    is_taco_dataset = (seq_data.get("which_dataset", "").lower() == "taco")
+
+    for mesh_path in seq_data["object_mesh_path"]:
+        # 读取网格文件
+        mesh = o3d.io.read_triangle_mesh(mesh_path)
+        
+        # 仅当网格有效时（有顶点）才进行处理
+        if mesh and mesh.has_vertices():
+            
+            # 如果是 TACO 数据集，则进行缩放
+            if is_taco_dataset:
+                center_point = np.zeros(3) #!!! 这里是中心点
+                mesh.scale(0.01, center=center_point)
+            
+            obj_meshes.append(mesh)
+            
+    return obj_meshes
+
+def get_point_clouds_from_human_data(seq_data, ds_num=1000, return_norm=False):
+    """
+    从序列数据中加载对象网格并提取下采样后的点云。
+
+    Args:
+        seq_data (dict): 包含对象网格路径等信息的字典。
+        ds_num (int, optional): 下采样后的点云数量。默认为 1000。
+        return_norm (bool, optional): 如果为 True，则额外返回与点云对应的法向量。默认为 False。
+
+    Returns:
+        list[np.ndarray]: 下采样后的点云列表。
+        OR
+        tuple[list[np.ndarray], list[np.ndarray]]: 如果 return_norm 为 True，则返回一个元组，
+                                                     包含点云列表和法向量列表。
+    """
+    obj_meshes = []
+    for mesh_path in seq_data["object_mesh_path"]:
+        # 读取网格文件
+        mesh = o3d.io.read_triangle_mesh(mesh_path)
+        # 仅当网格有效时（有顶点）才添加
+        if mesh and mesh.has_vertices():
+            obj_meshes.append(mesh)
+
+    # 提取原始顶点数据
+    original_pc = [np.asarray(mesh.vertices, dtype=np.float32) for mesh in obj_meshes]
+
+    original_normals = []
+    if return_norm:
+        # 如果需要返回法向量，则计算并提取它们
+        for mesh in obj_meshes:
+            mesh.compute_vertex_normals()  # 确保法向量已计算
+            original_normals.append(np.asarray(mesh.vertex_normals, dtype=np.float32))
+
+    # 使用最远点采样（FPS）获取下采样点的索引
+    # 注意：FPS 在原始点云上操作，返回的是索引
     original_pc_ls = [
-            farthest_point_sampling(torch.from_numpy(points).unsqueeze(0), ds_num)[:ds_num]  for points in original_pc
+            farthest_point_sampling(torch.from_numpy(points).unsqueeze(0), ds_num)
+            for points in original_pc
         ]
+    
+    # 使用索引从原始点云中选出下采样后的点
     pc_ds = [pc[pc_idx] for pc, pc_idx in zip(original_pc, original_pc_ls)]
 
-    if seq_data["which_dataset"] == 'TACO':
+    # TACO 数据集的特殊处理：缩放点云
+    # 注意：法向量是方向向量，不应被缩放
+    if seq_data["which_dataset"].lower() == 'taco':
         for i in range(len(pc_ds)):
             pc_ds[i] *= 0.01
 
-    return pc_ds
+    if return_norm:
+        # 如果需要，也使用相同的索引来采样法向量
+        normals_ds = [normals[pc_idx] for normals, pc_idx in zip(original_normals, original_pc_ls)]
+        return pc_ds, normals_ds
+    else:
+        # 默认只返回点云
+        return pc_ds
 
 
-def apply_transformation_human_data(points: List[torch.tensor], transformation: torch.tensor) -> torch.tensor:
-    obj_pc = [] # should be (T, N, 3) of len k
-    for pc, obj_trans in zip(points, transformation):
+# def apply_transformation_human_data(points: List[torch.tensor], transformation: torch.tensor) -> torch.tensor:
+#     '''
+#     return a list of transformed point clouds
+#     '''
+#     obj_pc = [] # should be (T, N, 3) of len k
+#     for pc, obj_trans in zip(points, transformation):
+#         t_frame_pc = []
+#         for t_trans in obj_trans:
+#             t_frame_pc.append(pt_transform(pc, t_trans.cpu().numpy()))
+#         obj_pc.append(np.array(t_frame_pc))
+#     pc_ls = []
+#     for t in range(transformation.shape[1]):
+#         pc_ls.append(np.concatenate([pc[t] for pc in obj_pc], axis=0))
+#     return pc_ls
+
+
+def apply_transformation_human_data(
+    points: List[torch.Tensor], 
+    transformation: torch.Tensor, 
+    norm: Optional[List[torch.Tensor]] = None
+):
+    '''
+    对点云列表应用一系列变换。
+    如果提供了法向量，则它们也会被相应地变换。
+
+    Args:
+        points: k个点云的列表。每个元素是形状为 (N_i, 3) 的张量。
+        transformation: 形状为 (k, T, 4, 4) 的变换张量。
+        norm: (可选) 与点对应的k个法向量列表。
+              每个元素的形状为 (N_i, 3)。默认为 None。
+
+    Returns:
+        如果 norm is None:
+            返回一个长度为 T 的列表，其中每个元素是所有对象在该时间帧下拼接后的点云 (np.ndarray)。
+        如果 norm is not None:
+            返回一个元组 (pc_ls, norm_ls)，分别包含变换后的点云和法向量列表。
+    '''
+    obj_pc = []  # 存储每个对象随时间变换后的点云
+    obj_norm = [] if norm is not None else None
+
+    if norm is not None and len(points) != len(norm):
+        raise ValueError("点云和法向量的列表长度必须相同。")
+
+    # 遍历每个对象
+    for i in range(len(points)):
+        pc_np = points[i].cpu().numpy() if type(points[i]) is torch.Tensor else points[i]
+        obj_trans_seq = transformation[i]
+
         t_frame_pc = []
-        for t_trans in obj_trans:
-            t_frame_pc.append(pt_transform(pc, t_trans.cpu().numpy()))
-        obj_pc.append(np.array(t_frame_pc))
+        t_frame_norm = [] if norm is not None else None
+
+        if norm is not None:
+            current_norm_np = norm[i].cpu().numpy() if type(norm[i]) is torch.Tensor else norm[i]
+        else:
+            current_norm_np = None
+
+        # 遍历该对象的时间序列变换
+        for t_trans in obj_trans_seq:
+            trans_np = t_trans.cpu().numpy()
+            
+            # 变换点
+            t_frame_pc.append(pt_transform(pc_np, trans_np))
+            
+            # 如果提供了法向量，则变换法向量
+            if current_norm_np is not None:
+                t_frame_norm.append(norm_transform(current_norm_np, trans_np))
+
+        obj_pc.append(np.array(t_frame_pc, dtype=np.float32))
+        if obj_norm is not None:
+            obj_norm.append(np.array(t_frame_norm, dtype=np.float32))
+
+    # 对于每个时间帧，拼接所有对象的点云（和法向量）
     pc_ls = []
-    for t in range(transformation.shape[1]):
+    norm_ls = [] if obj_norm is not None else None
+    
+    num_time_frames = transformation.shape[1]
+    for t in range(num_time_frames):
         pc_ls.append(np.concatenate([pc[t] for pc in obj_pc], axis=0))
-    return pc_ls
+        if norm_ls is not None:
+            norm_ls.append(np.concatenate([n[t] for n in obj_norm], axis=0))
+
+    if norm is not None:
+        return pc_ls, norm_ls
+    else:
+        return pc_ls
+
+
+from typing import List
+
+def apply_transformation_on_object_mesh(
+    meshes: List[o3d.geometry.TriangleMesh],
+    transformation: torch.Tensor
+) -> List[List[o3d.geometry.TriangleMesh]]:
+    """
+    对一系列Open3D网格应用一系列变换。
+
+    Args:
+        meshes: k个Open3D网格对象的列表。
+        transformation: 形状为 (k, T, 4, 4) 的变换张量，
+                      其中 k 是对象的数量，T 是时间帧的数量。
+
+    Returns:
+        一个长度为 k 的列表。每个元素是另一个列表，
+        包含了该物体在T个时间帧变换后的 o3d.geometry.TriangleMesh 对象。
+        例如: result[k][t] 是第 k 个对象在时间 t 的网格。
+    """
+    num_objects = transformation.shape[0]
+    num_time_frames = transformation.shape[1]
+
+    if len(meshes) != num_objects:
+        raise ValueError(
+            f"网格列表的长度 ({len(meshes)}) 必须与变换张量的第一个维度 ({num_objects}) 相同。"
+        )
+
+    # 初始化结果列表，外层代表物体
+    # transformed_meshes_per_object[k] 将存储第 k 个对象在所有时间帧的网格
+    transformed_meshes_per_object = [[] for _ in range(num_objects)]
+
+    # 遍历每个对象
+    for i in range(num_objects):
+        # 遍历每个时间帧
+        for t in range(num_time_frames):
+            # 获取原始网格和对应的变换矩阵
+            original_mesh = meshes[i]
+            trans_matrix_torch = transformation[i, t]
+
+            # 将 PyTorch 张量转换为 NumPy 数组以供 Open3D 使用
+            trans_matrix_np = trans_matrix_torch.cpu().numpy()
+
+            # 创建原始网格的副本以进行变换
+            # 这是为了确保原始网格在每个时间步的变换都是基于最原始的状态
+            transformed_mesh = o3d.geometry.TriangleMesh()
+            transformed_mesh.vertices = o3d.utility.Vector3dVector(np.asarray(original_mesh.vertices))
+            transformed_mesh.triangles = o3d.utility.Vector3iVector(np.asarray(original_mesh.triangles))
+            
+            # 保持法线和颜色信息（如果有的话）
+            if original_mesh.has_vertex_normals():
+                transformed_mesh.vertex_normals = o3d.utility.Vector3dVector(np.asarray(original_mesh.vertex_normals))
+            if original_mesh.has_vertex_colors():
+                transformed_mesh.vertex_colors = o3d.utility.Vector3dVector(np.asarray(original_mesh.vertex_colors))
+
+            # 应用变换
+            transformed_mesh.transform(trans_matrix_np)
+
+            # 将变换后的网格添加到对应物体的列表中
+            transformed_meshes_per_object[i].append(transformed_mesh)
+
+    return transformed_meshes_per_object
 
 
 def extract_hand_points_and_mesh_manopth(hand_tsls, hand_coeffs, side):

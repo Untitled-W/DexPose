@@ -155,10 +155,10 @@ if __name__ == "__main__":
     # dataset_names = ['dexycb', 'taco', 'oakinkv2']
     dataset_names = ['taco']
 
-    robots = [RobotName.allegro, RobotName.leap, RobotName.inspire, ] #RobotName.shadow, ]
+    robots = [RobotName.allegro, RobotName.leap, RobotName.inspire, RobotName.shadow, ]
 
     robot_dir = (
-        Path("/home/qianxu/Project25/DexPose/thirdparty/dex-retargeting/assets").absolute() / "robots" / "hands"
+        Path("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets").absolute() / "robots" / "hands"
     )
     RetargetingConfig.set_default_urdf_dir(robot_dir)
     processed_data = []

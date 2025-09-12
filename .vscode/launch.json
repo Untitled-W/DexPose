@@ -28,7 +28,7 @@
             "name": "anyteleop",
             "type": "debugpy",
             "request": "launch",
-            "module": "retarget.anyteleop",
+            "module": "retarget.anyteleop_copy",
             "python": "${command:python.interpreterPath}"
         },
 

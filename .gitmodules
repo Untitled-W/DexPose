@@ -10,4 +10,6 @@
 [submodule "thirdparty/manotorch"]
 	path = thirdparty/manotorch
 	url = https://github.com/lixiny/manotorch.git
-
+[submodule "thirdparty/TorchSDF"]
+	path = thirdparty/TorchSDF
+	url = https://github.com/wrc042/TorchSDF.git
