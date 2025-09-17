@@ -18,7 +18,8 @@ from dex_retargeting.constants import RobotName, HandType
 from dex_retargeting.retargeting_config import RetargetingConfig
 
 from utils.viewer import RobotHandDatasetSAPIENViewer
-from utils.vis_utils import visualize_dex_hand_sequence, visualize_dex_hand_sequence_together
+from utils.vis_utils import visualize_dex_hand_sequence
+from utils.wmq import visualize_dex_hand_sequence_together
 
 import warnings; warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -76,19 +77,19 @@ def main_retarget(seq_data_ls, robots: List[RobotName]):
         hand_side = HandType.right if sampled_data["side"] == 1 else HandType.left
         if hand_side == HandType.left: continue
         viewers = [
-            RobotHandDatasetSAPIENViewer(
-                list(robots), hand_side, headless=True, use_ray_tracing=True
-            ),
             # RobotHandDatasetSAPIENViewer(
-            #     list(robots), hand_side, headless=True, use_ray_tracing=True, optimizer_type="position_pc"
-            # )
+            #     list(robots), hand_side, headless=True, use_ray_tracing=True
+            # ),
+            RobotHandDatasetSAPIENViewer(
+                list(robots), hand_side, headless=True, use_ray_tracing=True, optimizer_type="position_pc"
+            )
         ]
         data_id = sampled_data["which_dataset"] + "_" + sampled_data["which_sequence"]
         sampled_data['obj_poses'] = sampled_data["obj_poses"] #@ sampled_data['mesh_norm_trans']
 
         for viewer in viewers:
             viewer.load_object_hand_dex(sampled_data)
-            outputs = viewer.retarget_and_save_dex(get_piece_by_frame(sampled_data), data_id)
+            outputs = viewer.retarget_and_save_dex(get_piece_by_frame(sampled_data, slice(55,65)), data_id)
             processed_data[viewer.optimizer_type].extend(outputs)
 
     return processed_data
@@ -172,14 +173,15 @@ if __name__ == "__main__":
 
     PROCESS = True
     if PROCESS:
-        # file_path = "/home/qianxu/Desktop/Project/DexPose/data_dict_wqx.pth"
-        # with open(file_path, "rb") as f:
-        #     seq_data_ls = torch.load(f)[:16]
-        file_path = "/home/qianxu/Desktop/Project/DexPose/seq_shadow_hand_debug_1.p"
+        file_path = "/home/qianxu/Desktop/Project/DexPose/data_dict_wqx_1.pth"
         with open(file_path, "rb") as f:
-            seq_data_ls = pickle.load(f)[0:16:4]
+            seq_data_ls = torch.load(f)[216:217]
+        # file_path = "/home/qianxu/Desktop/Project/DexPose/seq_shadow_hand_debug_1.p"
+        # with open(file_path, "rb") as f:
+        #     seq_data_ls = pickle.load(f)
+        #     seq_data_ls = seq_data_ls[1:16:4]   
         processed_data = main_retarget(seq_data_ls, robots)
-        save_results(processed_data, working_dir)
+        # save_results(processed_data, working_dir)
     else:
         folder_path = working_dir
         import os

@@ -5,6 +5,7 @@ vis_results
 wandb
 
 0912_ignore
+0912
 *.zip
 *.pth
 

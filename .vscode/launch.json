@@ -4,26 +4,43 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
+        {
+            "name": "retarget_wmq",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "retarget.retarget_wmq",
+            "python": "${command:python.interpreterPath}"
+        },
         {
             "name": "isaac",
             "type": "debugpy",
             "request": "launch",
             "program": "train_rlgames.py",
             "console": "integratedTerminal",
-            "args": ["--task", "ShadowHandFreeWithPhysics",
-                    "--algo", "arctic_grasp",
-                    "--seed", "22", "--num_envs", "8", "--play", "--enable_camera", "--start_idx", "0", "--start_timestep", "100"],
+            "args": [
+                "--task",
+                "ShadowHandFreeWithPhysics",
+                "--algo",
+                "arctic_grasp",
+                "--seed",
+                "22",
+                "--num_envs",
+                "8",
+                "--play",
+                "--enable_camera",
+                "--start_idx",
+                "0",
+                "--start_timestep",
+                "100"
+            ],
             "cwd": "/home/qianxu/Desktop/Project/DexPose/ObjDexEnvs/dexteroushandenvs",
         },
-
         {
             "name": "log vis",
             "type": "debugpy",
             "request": "launch",
             "module": "log.test_hand"
         },
-
         {
             "name": "anyteleop",
             "type": "debugpy",
@@ -31,7 +48,6 @@
             "module": "retarget.anyteleop_copy",
             "python": "${command:python.interpreterPath}"
         },
-
         {
             "name": "preprocessor",
             "type": "debugpy",

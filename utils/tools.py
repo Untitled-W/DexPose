@@ -429,24 +429,6 @@ def get_point_clouds_from_dexycb(data: dict):
     return pc_ds[0] # only 1 object in the dataset
 
 
-# def get_point_clouds_from_human_data(seq_data, ds_num=1000):
-#     obj_mesh = []
-#     for mesh_path in seq_data["object_mesh_path"]:
-#         obj_mesh.append(o3d.io.read_triangle_mesh(mesh_path))
-#     original_pc = [np.asarray(mesh.vertices) for mesh in obj_mesh if mesh is not None]
-
-#     original_pc_ls = [
-#             farthest_point_sampling(torch.from_numpy(points).unsqueeze(0), ds_num)[:ds_num]  for points in original_pc
-#         ]
-#     pc_ds = [pc[pc_idx] for pc, pc_idx in zip(original_pc, original_pc_ls)]
-
-#     if seq_data["which_dataset"].lower() == 'taco':
-#         for i in range(len(pc_ds)):
-#             pc_ds[i] *= 0.01
-
-#     return pc_ds
-
-
 import open3d as o3d
 from typing import List, Dict, Any
 
@@ -480,8 +462,14 @@ def get_object_meshes_from_human_data(seq_data: Dict[str, Any]) -> List[o3d.geom
                 center_point = np.zeros(3) #!!! 这里是中心点
                 mesh.scale(0.01, center=center_point)
             
-            obj_meshes.append(mesh)
+            target_faces = 200
+            if len(mesh.triangles) > target_faces:
+                mesh = mesh.simplify_quadric_decimation(target_number_of_triangles=target_faces)
+            mesh.remove_degenerate_triangles()
+            mesh.remove_non_manifold_edges()
             
+            obj_meshes.append(mesh)
+        
     return obj_meshes
 
 def get_point_clouds_from_human_data(seq_data, ds_num=1000, return_norm=False):
@@ -542,22 +530,6 @@ def get_point_clouds_from_human_data(seq_data, ds_num=1000, return_norm=False):
         return pc_ds
 
 
-# def apply_transformation_human_data(points: List[torch.tensor], transformation: torch.tensor) -> torch.tensor:
-#     '''
-#     return a list of transformed point clouds
-#     '''
-#     obj_pc = [] # should be (T, N, 3) of len k
-#     for pc, obj_trans in zip(points, transformation):
-#         t_frame_pc = []
-#         for t_trans in obj_trans:
-#             t_frame_pc.append(pt_transform(pc, t_trans.cpu().numpy()))
-#         obj_pc.append(np.array(t_frame_pc))
-#     pc_ls = []
-#     for t in range(transformation.shape[1]):
-#         pc_ls.append(np.concatenate([pc[t] for pc in obj_pc], axis=0))
-#     return pc_ls
-
-
 def apply_transformation_human_data(
     points: List[torch.Tensor], 
     transformation: torch.Tensor, 
@@ -575,7 +547,7 @@ def apply_transformation_human_data(
 
     Returns:
         如果 norm is None:
-            返回一个长度为 T 的列表，其中每个元素是所有对象在该时间帧下拼接后的点云 (np.ndarray)。
+            返回一个(np.ndarray), (T, N, 3) 。
         如果 norm is not None:
             返回一个元组 (pc_ls, norm_ls)，分别包含变换后的点云和法向量列表。
     '''
@@ -624,9 +596,9 @@ def apply_transformation_human_data(
             norm_ls.append(np.concatenate([n[t] for n in obj_norm], axis=0))
 
     if norm is not None:
-        return pc_ls, norm_ls
+        return np.asarray(pc_ls), np.asarray(norm_ls)
     else:
-        return pc_ls
+        return np.asarray(pc_ls)
 
 
 from typing import List

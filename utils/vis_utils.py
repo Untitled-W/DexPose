@@ -460,7 +460,7 @@ def vis_frames_plotly(
     """
     visulize everything as frames in plotly
     """
-    print(len(gt_hand_joints), gt_hand_joints[0].shape)
+    # print(len(gt_hand_joints), gt_hand_joints[0].shape)
 
     # Determine the number of frames, T, from the first available animated list.
     T = pc_ls[0].shape[0] if pc_ls is not None else gt_hand_joints.shape[0]
@@ -877,14 +877,13 @@ def visualize_human_sequence(seq_data, filename: Optional[str] = None):
     ##  Visualize Object Point Clouds ##
     pc = get_point_clouds_from_human_data(seq_data)
     pc_ls = apply_transformation_human_data(pc, seq_data["obj_poses"])
-    pc_ls = [np.asarray(pc_ls)] # due to some dim issue
 
     ## Extract Hand Points and Mesh ##
     mano_hand_joints, hand_verts = extract_hand_points_and_mesh(seq_data["hand_tsls"], seq_data["hand_coeffs"], seq_data["side"])
 
     # Visualize using vis_frames_plotly
     vis_frames_plotly(
-        pc_ls=pc_ls, # should be a list, len 1, (T, N, 3)
+        pc_ls=[pc_ls], # should be a list, len 1, (T, N, 3)
         gt_hand_joints=mano_hand_joints, # should be a tensor, (T, 21, 3)
         show_axis=True,
         filename=filename if filename else None
@@ -899,7 +898,6 @@ def visualize_human_sequence2(seq_data, filename: Optional[str] = None):
     poses = seq_data["obj_poses"] @ seq_data['mesh_norm_trans']
 
     pc_ls = apply_transformation_human_data(pc, poses)
-    pc_ls = [np.asarray(pc_ls)] # due to some dim issue
 
     ## Extract Hand Points and Mesh ##
     mano_hand_joints, hand_verts = extract_hand_points_and_mesh(seq_data["hand_tsls"], seq_data["hand_coeffs"], seq_data["side"])
@@ -908,7 +906,7 @@ def visualize_human_sequence2(seq_data, filename: Optional[str] = None):
 
     # Visualize using vis_frames_plotly
     vis_frames_plotly(
-        pc_ls=pc_ls, # should be a list, len 1, (T, N, 3)
+        pc_ls=[pc_ls], # should be a list, len 1, (T, N, 3)
         gt_hand_joints=mano_hand_joints, # should be a tensor, (T, 21, 3)
         show_axis=True,
         filename=filename if filename else None
@@ -945,12 +943,11 @@ def visualize_dex_hand_sequence(seq_data, filename: Optional[str] = None):
     ### point clouds ###
     pc = get_point_clouds_from_human_data(seq_data)
     pc_ls = apply_transformation_human_data(pc, seq_data["obj_poses"]) # TxNx3
-    pc_ls = [np.asarray(pc_ls)] # due to some dim issue
     object_mesh = get_object_meshes_from_human_data(seq_data)   
     object_ls = apply_transformation_on_object_mesh(object_mesh, seq_data["obj_poses"]) # a list of (B) a list of (T) meshes
 
     vis_frames_plotly(
-        pc_ls=pc_ls,
+        pc_ls=[pc_ls],
         gt_hand_joints=mano_hand_joints,
         hand_mesh=hand_meshes,
         object_mesh_ls=object_ls,
@@ -1005,33 +1002,16 @@ def vis_single_frame_with_offset(pc: np.ndarray, gt_hand_joints: torch.Tensor,
     return data
 
 
-def vis_grid(seq_data_ls, filename):
-    """
-    高效地在网格中可视化多个点云和手部姿态。
-    所有点云合并为一个trace，所有手部关节点合并为一个trace，
-    所有手部骨架合并为一个trace，以实现高性能渲染。
-    """
-    import plotly
-    # 1. 定义手部关节点分组，这部分逻辑现在移到 vis_grid 内部或作为全局常量
-    FINGER_GROUPS_21 = {
-        'wrist': [0], # 单独处理手腕
-        'thumb': [0, 1, 2, 3, 4],
-        'index': [0, 5, 6, 7, 8],
-        'middle': [0, 9, 10, 11, 12],
-        'ring': [0, 13, 14, 15, 16],
-        'pinky': [0, 17, 18, 19, 20]
-    }
 
-    # 2. 定义颜色映射
-    # 使用Plotly的内置色板为每个手指分配一个固定的颜色
-    finger_color_map = {
-        'wrist': 'grey',
-        'thumb': plotly.colors.qualitative.Plotly[0],
-        'index': plotly.colors.qualitative.Plotly[1],
-        'middle': plotly.colors.qualitative.Plotly[2],
-        'ring': plotly.colors.qualitative.Plotly[3],
-        'pinky': plotly.colors.qualitative.Plotly[4],
-    }
+def vis_grid(seq_data_ls, filename=None):
+    """
+    在网格中可视化多个手部和物体姿态，具有按序列分组的图例和优化的配色方案。
+
+    - 为每种独特物体分配一个红色/橙色系的渐变色。
+    - 手部骨架为蓝色，关节点为绿色。
+    - 通过缓存机制避免重复处理相同的网格文件。
+    - 修复了网格降采样后可能出现的拓扑漏洞。
+    """
 
     def apply_transformation_to_vertices(vertices, transform_matrix):
         """将4x4变换矩阵应用于 N*3 的顶点云"""
@@ -1039,176 +1019,334 @@ def vis_grid(seq_data_ls, filename):
         transformed_vertices_h = (transform_matrix @ vertices_h.T).T
         return transformed_vertices_h[:, :3]
 
-    # === 1. 初始化用于聚合所有数据的容器 ===
-    all_pc_points = []
-    all_mesh_x, all_mesh_y, all_mesh_z = [], [], []
-    all_mesh_i, all_mesh_j, all_mesh_k = [], [], []
-
-    # 手部关节点 (Markers)
-    all_joint_x, all_joint_y, all_joint_z = [], [], []
-    all_joint_colors = []
+    # === 1. 预处理阶段: 收集信息、创建缓存和颜色映射 ===
+    print("Preprocessing: Caching meshes and creating color maps...")
     
-    # 手部骨架 (Lines)
-    all_line_x, all_line_y, all_line_z = [], [], []
+    # 收集所有独特的物体网格路径
+    unique_mesh_paths = sorted(list(set(
+        path for seq in seq_data_ls for path in seq.get("object_mesh_path", [])
+    )))
+    
+    # 为每种独特物体创建一个红色/橙色系的渐变色
+    num_unique_objects = len(unique_mesh_paths)
+    object_colors = plotly.colors.sample_colorscale(
+        'OrRd', np.linspace(0.3, 0.9, num_unique_objects)
+    )
+    path_to_color = {path: color for path, color in zip(unique_mesh_paths, object_colors)}
 
-    row_total = int(np.sqrt(len(seq_data_ls)))
-    col_total = int(np.ceil(len(seq_data_ls) / row_total))
+    # 创建网格缓存，避免重复加载和处理
+    mesh_cache = {}
+    for path in unique_mesh_paths:
+        mesh = o3d.io.read_triangle_mesh(path)
+        
+        # 降采样
+        target_faces = 200
+        if len(mesh.triangles) > target_faces:
+            mesh = mesh.simplify_quadric_decimation(target_number_of_triangles=target_faces)
+        
+        # <<< 关键: 修复降采样可能导致的拓扑问题 >>>
+        mesh.remove_degenerate_triangles()
+        mesh.remove_non_manifold_edges()
+        
+        mesh_cache[path] = {
+            'vertices': np.asarray(mesh.vertices),
+            'faces': np.asarray(mesh.triangles)
+        }
+
+    # --- 手部关节点定义 ---
+    FINGER_CONNECTIONS_21 = [
+        [0, 1, 2, 3, 4], [0, 5, 6, 7, 8], [0, 9, 10, 11, 12],
+        [0, 13, 14, 15, 16], [0, 17, 18, 19, 20]
+    ]
+
+    # === 2. 主循环: 构建 Plotly Traces ===
+    data = []
+    num_items = len(seq_data_ls)
+    if num_items == 0: return
+        
+    row_total = int(np.sqrt(num_items))
+    col_total = int(np.ceil(num_items / row_total))
     padding = 0.25
-    vertex_offset = 0
 
-    print("Aggregating data for visualization...")
+    print("Processing each sequence to create visualization traces...")
     for iid, seq_data in tqdm(enumerate(seq_data_ls)):
         column = iid % col_total
         row = iid // col_total
         offset = np.array([column * padding, row * padding, 0])
-        
-        # --- 模拟数据加载，请替换为您自己的函数 ---
+        legend_group_name = f"Sequence {iid}"
+
+        # --- 2.1 处理物体网格 (使用缓存) ---
+        all_mesh_verts_local, all_mesh_faces_local = [], []
+        vertex_offset = 0
         poses = seq_data["obj_poses"] @ seq_data['mesh_norm_trans']
-        # pc = get_point_clouds_from_human_data(seq_data, ds_num=600)
-        # pc_ls = apply_transformation_human_data(pc, poses)
-
+        
         for obj_ii, mesh_path in enumerate(seq_data["object_mesh_path"]):
-            mesh = o3d.io.read_triangle_mesh(mesh_path)
-            verts = np.asarray(mesh.vertices)
-            faces = np.asarray(mesh.triangles)
-            target_faces = 100  # 目标面数
-            if len(faces) > target_faces:
-                mesh = mesh.simplify_quadric_decimation(target_number_of_triangles=target_faces)
-                verts = np.asarray(mesh.vertices)
-                faces = np.asarray(mesh.triangles)
-            transformed_verts = apply_transformation_to_vertices(verts*0.01, poses[obj_ii, 60])
+            # 从缓存中直接获取处理好的网格数据
+            cached_mesh = mesh_cache[mesh_path]
+            verts, faces = cached_mesh['vertices'], cached_mesh['faces']
+
+            transformed_verts = apply_transformation_to_vertices(verts * 0.01, poses[obj_ii, 60])
             transformed_verts += offset
-
-            all_mesh_x.extend(transformed_verts[:, 0])
-            all_mesh_y.extend(transformed_verts[:, 1])
-            all_mesh_z.extend(transformed_verts[:, 2])
-
-            all_mesh_i.extend(faces[:, 0] + vertex_offset)
-            all_mesh_j.extend(faces[:, 1] + vertex_offset)
-            all_mesh_k.extend(faces[:, 2] + vertex_offset)
-
-            # 更新顶点偏移量，为下一个网格的合并做准备
+            
+            all_mesh_verts_local.append(transformed_verts)
+            all_mesh_faces_local.append(faces + vertex_offset)
             vertex_offset += len(verts)
+        
+        if all_mesh_verts_local:
+            final_verts = np.concatenate(all_mesh_verts_local, axis=0)
+            final_faces = np.concatenate(all_mesh_faces_local, axis=0)
+            
+            # 创建物体网格 Trace (使用新配色)
+            data.append(go.Mesh3d(
+                x=final_verts[:, 0], y=final_verts[:, 1], z=final_verts[:, 2],
+                i=final_faces[:, 0], j=final_faces[:, 1], k=final_faces[:, 2],
+                color=path_to_color.get(seq_data["object_mesh_path"][0], 'red'), # 使用该序列第一个物体的颜色作为代表
+                opacity=0.8, # 设置透明度
+                lighting=dict(ambient=0.4, diffuse=1.0, specular=0.5),
+                lightposition=dict(x=100, y=200, z=0),
+                name=legend_group_name,
+                legendgroup=legend_group_name,
+                showlegend=True,
+            ))
 
+            # 创建黑色线框 Trace
+            edge_x, edge_y, edge_z = [], [], []
+            for i, j, k in final_faces:
+                p0, p1, p2 = final_verts[i], final_verts[j], final_verts[k]
+                edge_x.extend([p0[0], p1[0], p1[0], p2[0], p2[0], p0[0], None])
+                edge_y.extend([p0[1], p1[1], p1[1], p2[1], p2[1], p0[1], None])
+                edge_z.extend([p0[2], p1[2], p1[2], p2[2], p2[2], p0[2], None])
+            
+            data.append(go.Scatter3d(
+                x=edge_x, y=edge_y, z=edge_z, mode='lines',
+                line=dict(color='black', width=0.5),
+                legendgroup=legend_group_name, showlegend=False
+            ))
+
+        # --- 2.2 处理手部姿态 (使用新配色) ---
         mano_hand_joints = seq_data['hand_joints']
-        # --- 数据加载结束 ---
-
-        # (2.1) 处理并聚合点云数据
-        # pc_offset = pc_ls[60] + offset
-        # all_pc_points.append(pc_offset)
-
-        # (2.2) 处理并聚合手部姿态数据
         hand_joints_np = mano_hand_joints[60].cpu().numpy()
         hand_joints_offset = hand_joints_np + offset
+
+        # 准备骨架线条数据
+        line_x, line_y, line_z = [], [], []
+        for connection in FINGER_CONNECTIONS_21:
+            for i in range(len(connection) - 1):
+                p1, p2 = hand_joints_offset[connection[i]], hand_joints_offset[connection[i+1]]
+                line_x.extend([p1[0], p2[0], None])
+                line_y.extend([p1[1], p2[1], None])
+                line_z.extend([p1[2], p2[2], None])
         
-        # --- 内联 get_vis_hand_keypoints_with_color_gradient_and_lines 的逻辑 ---
-        
-        # 添加关节点坐标和颜色到聚合列表
-        for finger_name, indices in FINGER_GROUPS_21.items():
-            if finger_name == 'wrist': # 单独处理手腕点
-                idx = indices[0]
-                all_joint_x.append(hand_joints_offset[idx, 0])
-                all_joint_y.append(hand_joints_offset[idx, 1])
-                all_joint_z.append(hand_joints_offset[idx, 2])
-                all_joint_colors.append(finger_color_map['wrist'])
-                continue
+        # 创建手部骨架线条 Trace (蓝色)
+        data.append(go.Scatter3d(
+            x=line_x, y=line_y, z=line_z, mode='lines',
+            line=dict(color='blue', width=8), # 新配色
+            legendgroup=legend_group_name, showlegend=False
+        ))
 
-            # 为每个手指内的关节点（除手腕）添加数据
-            for idx in indices[1:]: # 跳过手腕点，因为它已被处理
-                all_joint_x.append(hand_joints_offset[idx, 0])
-                all_joint_y.append(hand_joints_offset[idx, 1])
-                all_joint_z.append(hand_joints_offset[idx, 2])
-                all_joint_colors.append(finger_color_map[finger_name])
+        # 创建手部关节点 Trace (绿色)
+        data.append(go.Scatter3d(
+            x=hand_joints_offset[:, 0], y=hand_joints_offset[:, 1], z=hand_joints_offset[:, 2],
+            mode='markers',
+            marker=dict(size=5, color='green'), # 新配色
+            legendgroup=legend_group_name, showlegend=False
+        ))
 
-            # 添加连接手指内部关节点的骨架线条
-            for i in range(len(indices) - 1):
-                p1_idx, p2_idx = indices[i], indices[i+1]
-                p1 = hand_joints_offset[p1_idx]
-                p2 = hand_joints_offset[p2_idx]
-                
-                all_line_x.extend([p1[0], p2[0], None]) # 'None' 用于断开线条
-                all_line_y.extend([p1[1], p2[1], None])
-                all_line_z.extend([p1[2], p2[2], None])
-
-    # === 3. 循环结束后，根据聚合数据创建高效的 Plotly Traces ===
-    
-    data = []
-    
-    # (3.1) 创建点云的 Trace
-    # 首先将点云列表合并成一个大的Numpy数组
-    # all_pcs_np = np.concatenate(all_pc_points, axis=0)
-    # data.append(go.Scatter3d(
-    #     x=all_pcs_np[:, 0], 
-    #     y=all_pcs_np[:, 1], 
-    #     z=all_pcs_np[:, 2], 
-    #     mode='markers', 
-    #     marker=dict(size=5, color='lightpink', opacity=0.7), 
-    # ))
-
-    # (3.2) 创建手部骨架线条的 Trace
-    data.append(go.Scatter3d(
-        x=all_line_x,
-        y=all_line_y,
-        z=all_line_z,
-        mode='lines',
-        line=dict(color='grey', width=10),
-    ))
-
-    # (3.3) 创建手部关节点的 Trace
-    data.append(go.Scatter3d(
-        x=all_joint_x,
-        y=all_joint_y,
-        z=all_joint_z,
-        mode='markers',
-        marker=dict(
-            size=5,
-            color=all_joint_colors, # 关键：传入颜色数组实现逐点着色
-        ),
-    ))
-
-    # (3.4) 创建所有对象网格的合并 Trace
-    data.append(go.Mesh3d(
-        x=all_mesh_x, y=all_mesh_y, z=all_mesh_z,
-        i=all_mesh_i, j=all_mesh_j, k=all_mesh_k,
-        color='saddlebrown',
-        opacity=0.7, # 可以稍微调高不透明度，使其更有实体感
-        # 添加光照效果可以让网格看起来更立体
-        lighting=dict(ambient=0.4, diffuse=1.0, specular=0.5),
-        lightposition=dict(x=100, y=200, z=0)
-    ))
-
-    tri_points = np.array([all_mesh_x, all_mesh_y, all_mesh_z]).T
-    tri_indices = np.array([all_mesh_i, all_mesh_j, all_mesh_k]).T
-    
-    edge_x, edge_y, edge_z = [], [], []
-    for i, j, k in tri_indices:
-        p0, p1, p2 = tri_points[i], tri_points[j], tri_points[k]
-        edge_x.extend([p0[0], p1[0], p1[0], p2[0], p2[0], p0[0], None])
-        edge_y.extend([p0[1], p1[1], p1[1], p2[1], p2[1], p0[1], None])
-        edge_z.extend([p0[2], p1[2], p1[2], p2[2], p2[2], p0[2], None])
-
-    data.append(go.Scatter3d(
-        x=edge_x,
-        y=edge_y,
-        z=edge_z,
-        mode='lines',
-        line=dict(color='black', width=0.5), # 黑色或深灰色的细线效果最好
-        showlegend=False # 通常我们不需要为边线单独显示图例
-    ))
-
-    # === 4. 创建并显示/保存图表 ===
+    # === 3. 创建并显示/保存图表 ===
     fig = go.Figure(data=data)
     fig.update_layout(
-        title=f"Grid Visualization of {len(seq_data_ls)} items",
+        title=f"Grid Visualization of {num_items} items",
         scene=dict(
-            xaxis_title='X',
-            yaxis_title='Y',
-            zaxis_title='Z',
-            aspectmode='data' # 保持XYZ轴的比例一致
+            aspectmode='data',
+            xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False),
         ),
-        legend_orientation="h",
+        legend_title_text='Sequences',
         legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
     )
+
+    if filename is not None:
+        fig.write_html(f'{filename}.html')
+        print(f"Figure saved to {filename}.html")
+    else:
+        fig.show()
+
+
+import plotly.colors
+
+
+def vis_as_frame(seq_data_ls, filename=None):
+    """
+    将多个序列可视化为动画中的连续帧。
+
+    此函数继承了 vis_grid 的高效缓存、网格修复和配色方案，但输出
+    格式为一个带有滑动条的动画，其中每个序列是动画的一帧。
+
+    - 为每种独特物体分配一个红色/橙色系的渐变色。
+    - 手部骨架为蓝色，关节点为绿色。
+    - 通过缓存机制避免重复处理相同的网格文件。
+    - 修复了网格降采样后可能出现的拓扑漏洞。
+    """
+
+    def apply_transformation_to_vertices(vertices, transform_matrix):
+        """将4x4变换矩阵应用于 N*3 的顶点云"""
+        vertices_h = np.hstack((vertices, np.ones((vertices.shape[0], 1))))
+        transformed_vertices_h = (transform_matrix @ vertices_h.T).T
+        return transformed_vertices_h[:, :3]
+
+    # === 1. 预处理阶段: 收集信息、创建缓存和颜色映射 (与 vis_grid 相同) ===
+    print("Preprocessing: Caching meshes and creating color maps...")
+    
+    unique_mesh_paths = sorted(list(set(
+        path for seq in seq_data_ls for path in seq.get("object_mesh_path", [])
+    )))
+    
+    num_unique_objects = len(unique_mesh_paths)
+    object_colors = plotly.colors.sample_colorscale(
+        'OrRd', np.linspace(0.3, 0.9, num_unique_objects)
+    )
+    path_to_color = {path: color for path, color in zip(unique_mesh_paths, object_colors)}
+
+    mesh_cache = {}
+    for path in unique_mesh_paths:
+        mesh = o3d.io.read_triangle_mesh(path)
+        target_faces = 200
+        if len(mesh.triangles) > target_faces:
+            mesh = mesh.simplify_quadric_decimation(target_number_of_triangles=target_faces)
+        
+        mesh.remove_degenerate_triangles()
+        mesh.remove_non_manifold_edges()
+        
+        mesh_cache[path] = {
+            'vertices': np.asarray(mesh.vertices),
+            'faces': np.asarray(mesh.triangles)
+        }
+
+    FINGER_CONNECTIONS_21 = [
+        [0, 1, 2, 3, 4], [0, 5, 6, 7, 8], [0, 9, 10, 11, 12],
+        [0, 13, 14, 15, 16], [0, 17, 18, 19, 20]
+    ]
+
+    # === 2. 主循环: 为每个序列构建一个动画帧 ===
+    frames = []
+    num_items = len(seq_data_ls)
+    if num_items == 0: return
+
+    print("Processing each sequence to create an animation frame...")
+    for iid, seq_data in tqdm(enumerate(seq_data_ls)):
+        # 每个帧的数据都将存储在这个列表中
+        frame_data = []
+
+        # --- 2.1 处理当前帧的物体网格 ---
+        all_mesh_verts_local, all_mesh_faces_local = [], []
+        vertex_offset = 0
+        poses = seq_data["obj_poses"] @ seq_data['mesh_norm_trans']
+        
+        for obj_ii, mesh_path in enumerate(seq_data["object_mesh_path"]):
+            cached_mesh = mesh_cache[mesh_path]
+            verts, faces = cached_mesh['vertices'], cached_mesh['faces']
+
+            # 不再需要 offset，所有物体都在原点附近
+            transformed_verts = apply_transformation_to_vertices(verts * 0.01, poses[obj_ii, 60])
+            
+            all_mesh_verts_local.append(transformed_verts)
+            all_mesh_faces_local.append(faces + vertex_offset)
+            vertex_offset += len(verts)
+        
+        if all_mesh_verts_local:
+            final_verts = np.concatenate(all_mesh_verts_local, axis=0)
+            final_faces = np.concatenate(all_mesh_faces_local, axis=0)
+            
+            frame_data.append(go.Mesh3d(
+                x=final_verts[:, 0], y=final_verts[:, 1], z=final_verts[:, 2],
+                i=final_faces[:, 0], j=final_faces[:, 1], k=final_faces[:, 2],
+                color=path_to_color.get(seq_data["object_mesh_path"][0], 'red'),
+                opacity=0.8,
+                lighting=dict(ambient=0.4, diffuse=1.0, specular=0.5),
+                lightposition=dict(x=100, y=200, z=0),
+                name="Object",
+            ))
+
+            edge_x, edge_y, edge_z = [], [], []
+            for i, j, k in final_faces:
+                p0, p1, p2 = final_verts[i], final_verts[j], final_verts[k]
+                edge_x.extend([p0[0], p1[0], p1[0], p2[0], p2[0], p0[0], None])
+                edge_y.extend([p0[1], p1[1], p1[1], p2[1], p2[1], p0[1], None])
+                edge_z.extend([p0[2], p1[2], p1[2], p2[2], p2[2], p0[2], None])
+            
+            frame_data.append(go.Scatter3d(
+                x=edge_x, y=edge_y, z=edge_z, mode='lines',
+                line=dict(color='black', width=0.5), showlegend=False
+            ))
+
+        # --- 2.2 处理当前帧的手部姿态 ---
+        mano_hand_joints = seq_data['hand_joints']
+        hand_joints_np = mano_hand_joints[60].cpu().numpy() # 不再需要 offset
+
+        line_x, line_y, line_z = [], [], []
+        for connection in FINGER_CONNECTIONS_21:
+            for i in range(len(connection) - 1):
+                p1, p2 = hand_joints_np[connection[i]], hand_joints_np[connection[i+1]]
+                line_x.extend([p1[0], p2[0], None])
+                line_y.extend([p1[1], p2[1], None])
+                line_z.extend([p1[2], p2[2], None])
+        
+        frame_data.append(go.Scatter3d(
+            x=line_x, y=line_y, z=line_z, mode='lines',
+            line=dict(color='blue', width=8), name="Hand Skeleton", showlegend=False
+        ))
+
+        frame_data.append(go.Scatter3d(
+            x=hand_joints_np[:, 0], y=hand_joints_np[:, 1], z=hand_joints_np[:, 2],
+            mode='markers',
+            marker=dict(size=5, color='green'), name="Hand Joints", showlegend=False
+        ))
+        
+        # 将处理完的帧数据打包成一个 go.Frame 对象
+        frames.append(go.Frame(data=frame_data, name=f"Sequence {iid}"))
+
+    # === 3. 创建并组装最终的动画图表 ===
+    if not frames:
+        print("No frames were generated.")
+        return
+
+    # 使用第一帧的数据作为初始显示
+    initial_data = frames[0].data
+
+    # 创建滑块步骤
+    slider_steps = []
+    for i in range(num_items):
+        step = dict(
+            method="animate",
+            label=f"{i}",
+            args=[[f"Sequence {i}"],
+                  dict(frame=dict(duration=0, redraw=True),
+                       mode="immediate",
+                       transition=dict(duration=0))])
+        slider_steps.append(step)
+
+    # 创建布局，包含滑块和播放/暂停按钮
+    layout = go.Layout(
+        title=f"Animated Visualization of {num_items} items",
+        scene=dict(
+            aspectmode='data',
+            xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False),
+        ),
+        updatemenus=[dict(
+            type="buttons",
+            buttons=[
+                dict(label="Play", method="animate", args=[None, dict(frame=dict(duration=100, redraw=True), fromcurrent=True, mode="immediate")]),
+                dict(label="Pause", method="animate", args=[[None], dict(frame=dict(duration=0, redraw=False), mode="immediate")])
+            ]
+        )],
+        sliders=[dict(
+            active=0,
+            steps=slider_steps,
+            currentvalue=dict(font=dict(size=20), prefix="Sequence: ", visible=True)
+        )]
+    )
+
+    # 生成图表
+    fig = go.Figure(data=initial_data, layout=layout, frames=frames)
 
     if filename is not None:
         fig.write_html(f'{filename}.html')
@@ -1221,11 +1359,8 @@ def visualize_dex_hand_sequence_together(seq_data_ls, name_list, filename: Optio
 
     seq_data = seq_data_ls[0]
     pc = get_point_clouds_from_human_data(seq_data)
-    # pc_ls = apply_transformation_human_data(pc, seq_data["obj_poses"] @ seq_data['mesh_norm_trans']) # TxNx3
     pc_ls = apply_transformation_human_data(pc, seq_data["obj_poses"]) # TxNx3
-    pc_ls = [np.asarray(pc_ls)] # due to some dim issue
     object_mesh = get_object_meshes_from_human_data(seq_data)   
-    # object_ls = apply_transformation_on_object_mesh(object_mesh, seq_data["obj_poses"] @ seq_data['mesh_norm_trans']) # a list of (B) a list of (T) meshes
     object_ls = apply_transformation_on_object_mesh(object_mesh, seq_data["obj_poses"]) # a list of (B) a list of (T) meshes
     mano_hand_joints, hand_verts = extract_hand_points_and_mesh(seq_data["hand_tsls"], seq_data["hand_coeffs"], seq_data["side"])
 
@@ -1243,7 +1378,7 @@ def visualize_dex_hand_sequence_together(seq_data_ls, name_list, filename: Optio
         hand_mesh_ls.append(hand_meshes)
 
     vis_frames_plotly(
-        pc_ls=pc_ls,
+        pc_ls=[pc_ls],
         # object_mesh_ls=object_ls,
         hand_mesh_ls=hand_mesh_ls,
         hand_name_ls=name_list,

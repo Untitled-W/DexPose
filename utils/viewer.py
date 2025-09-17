@@ -448,10 +448,19 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 hand_type=self.hand_type,
                 is_mano_convention=True,
             )
-
+        
         from utils.tools import get_point_clouds_from_human_data, apply_transformation_human_data
         pc, pc_norm = get_point_clouds_from_human_data(data, return_norm=True)
         pc_ls, pc_norm_ls = apply_transformation_human_data(pc, data["obj_poses"], norm=pc_norm)
+
+        if True:
+            from .vis_utils import vis_pc_coor_plotly
+            vis_pc_coor_plotly(pc_ls=[pc_ls[start_frame]], 
+                               hand_joints_ls=[joints],
+                                # posi_pts_ls=[retargeting.optimizer.robot.get_penetration_keypoints().detach().cpu().numpy()],
+                                hand_mesh=retargeting.optimizer.robot.get_trimesh_data(), 
+                                obj_norm_ls=[pc_norm_ls[start_frame]],
+                                filename=f"retarget/0912/warm_up_{data['which_sequence']}")
 
         # Loop rendering
         for i in trange(start_frame, num_frame):
@@ -486,8 +495,10 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 indices = retargeting.optimizer.target_link_human_indices
                 ref_value = joints[indices, :]
                 # print("Frame:", i, "Ref value:", ref_value)
-                retargeting.set_pc(pc_ls[i], pc_norm_ls[i])
-                qpos_retarget = retargeting.retarget(ref_value)
+                # retargeting.set_pc(pc_ls[i], pc_norm_ls[i])
+                qpos_retarget = retargeting.retarget(ref_value, 
+                                        point_cloud=pc_ls[i], point_cloud_norm=pc_norm_ls[i], hand_joints=joints, 
+                                        frame_id=i, debug_optimize=True)
                 qpos_sapien = qpos_retarget[retarget2sapien]
                 qpos_pk = qpos_retarget[retarget2pk]
                 # print("Frame:", i, "Qpos Sapien:", qpos_sapien)
@@ -495,15 +506,16 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 robot.set_qpos(qpos_sapien)
                 qpos_dict[robot_name].append(qpos_pk.copy())
 
-                # if i == 30:
-                #     from .vis_utils import vis_pc_coor_plotly
-                #     vis_pc_coor_plotly(pc_ls=[pc_ls[i]], 
-                #                        posi_pts_ls=[retargeting.optimizer.robot.get_penetration_keypoints().detach().cpu().numpy()],
-                #                        hand_mesh=retargeting.optimizer.robot.get_trimesh_data(), 
-                #                        obj_norm_ls=[pc_norm_ls[i]],
-                #                        filename="xxx_0")
-                    
-                #     import sys; sys.exit(0)
+                if i == 5:
+                    from .vis_utils import vis_pc_coor_plotly
+                    vis_pc_coor_plotly(pc_ls=[pc_ls[i]], 
+                                       hand_joints_ls=[joints],
+                                       posi_pts_ls=[retargeting.optimizer.robot.get_penetration_keypoints().detach().cpu().numpy()],
+                                       hand_mesh=retargeting.optimizer.robot.get_trimesh_data(), 
+                                       obj_norm_ls=[pc_norm_ls[i]],
+                                       filename=f"retarget/0912/middle_{data['which_sequence']}")
+
+                    import sys; sys.exit(0)
 
         # Save qpos to disk as npy files
         # save_dir = Path('retarget/hand_qpos')
@@ -535,9 +547,5 @@ class RobotHandDatasetSAPIENViewer(HandDatasetSAPIENViewer):
                 which_sequence=data["which_sequence"],
                 extra_info=data["extra_info"]
             ))
-
-            # print("QPOS:")
-            # for i, q in enumerate(qpos_arr):
-            #     print(f"Frame {i}: {q}")
 
         return retargeted_data

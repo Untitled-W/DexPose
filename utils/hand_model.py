@@ -19,6 +19,7 @@ class HandModelURDF:
         device: str | torch.Device
             device for torch tensors
         """
+        self.robot_name = robot_name
         # if device is None:
         #     self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # else:
@@ -31,6 +32,7 @@ class HandModelURDF:
         self.chain = pk.build_chain_from_urdf(open(urdf_path, "rb").read()).to(dtype=torch.float, device=self.device)
         # print("n-DoF:", len(self.chain.get_joint_parameter_names()))
         self.n_dofs = len(self.chain.get_joint_parameter_names())
+        self.dof = self.n_dofs
         
         self.mesh = {}
 
@@ -195,8 +197,11 @@ class HandModelURDF:
             
         return data
     
+    def get_trimesh_data(self):
+        return self.get_hand_mesh()
 
-def load_robot(robot_name_str: str, side):
+
+def load_robot(robot_name_str: str, side='right'):
 
     hand_asset_root = os.path.join("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands", robot_name_str)
     
