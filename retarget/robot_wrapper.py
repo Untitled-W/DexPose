@@ -6,6 +6,7 @@ import json
 import os
 import open3d as o3d
 import pytorch_kinematics as pk
+import pytorch_volumetric as pv
 import pytorch3d.ops
 import pytorch3d.structures
 from torchsdf import index_vertices_by_faces, compute_sdf
@@ -58,8 +59,6 @@ class RobotWrapper:
     def joint_limits(self):
         lower = self.model.lowerPositionLimit
         upper = self.model.upperPositionLimit
-        return np.stack([lower, upper], axis=1)
-
     # -------------------------------------------------------------------------- #
     # Query function
     # -------------------------------------------------------------------------- #
@@ -104,7 +103,208 @@ class RobotWrapper:
         return J
 
 
-class HandRobotWrapper(RobotWrapper):
+import torch
+import numpy as np
+import trimesh
+import open3d as o3d
+
+# =========================================================================
+# HELPER FUNCTIONS
+# =========================================================================
+
+
+def fit_capsule_to_points_wrong(points: torch.Tensor, padding_factor: float = 1.05):
+    """
+    Fits an arbitrarily oriented capsule to a point cloud using PCA.
+    Returns dict with *tensor* fields so gradient flow is preserved.
+    """
+    if points.shape[0] < 3:
+        center = points.mean(dim=0, keepdim=True) if points.shape[0] > 0 else torch.zeros(1, 3, device=points.device)
+        return {'start': center, 'end': center, 'radius': torch.tensor(0.01, device=points.device)}
+
+    mean = points.mean(dim=0)
+    centered = points - mean
+    _, _, Vh = torch.linalg.svd(centered)
+    direction = Vh.T[:, 0]                      # PCA 主方向
+
+    projections = centered @ direction
+    min_proj, max_proj = projections.min(), projections.max()
+    p1 = mean + min_proj * direction
+    p2 = mean + max_proj * direction
+
+    line_vec = p2 - p1
+    line_len_sq = torch.dot(line_vec, line_vec)
+
+    if line_len_sq < 1e-8:                      # 退化→球
+        radius = (points - p1).norm(dim=1).max()
+    else:
+        t = ((points - p1) @ line_vec).clamp(0, 1)
+        closest = p1 + t.unsqueeze(1) * line_vec
+        radius = (points - closest).norm(dim=1).max()
+
+    return {'start': p1.unsqueeze(0),
+            'end': p2.unsqueeze(0),
+            'radius': radius * padding_factor} 
+
+def fit_capsule_to_points(points: torch.Tensor, padding_factor: float = 1.05):
+    """
+    Fits an arbitrarily oriented capsule to a point cloud using PCA.
+    (This is the same robust function from previous answers)
+    """
+    if points.shape[0] < 3:
+        center = torch.mean(points, dim=0, keepdim=True) if points.shape[0] > 0 else torch.zeros(1, 3, device=points.device)
+        return {'start': center, 'end': center, 'radius': 0.01}
+    
+    mean = torch.mean(points, dim=0)
+    centered_points = points - mean
+    U, S, Vh = torch.linalg.svd(centered_points)
+    direction = Vh.T[:, 0]
+    projections = torch.matmul(centered_points, direction)
+    min_proj, max_proj = torch.min(projections), torch.max(projections)
+    p1 = mean + min_proj * direction
+    p2 = mean + max_proj * direction
+    
+    line_vec = p2 - p1
+    line_len_sq = torch.dot(line_vec, line_vec)
+    if line_len_sq < 1e-8:
+        dists = torch.linalg.norm(points - p1, dim=1)
+        radius = torch.max(dists)
+    else:
+        t = torch.clamp(torch.matmul(points - p1, line_vec) / line_len_sq, 0.0, 1.0)
+        closest_points = p1.unsqueeze(0) + t.unsqueeze(1) * line_vec.unsqueeze(0)
+        dists = torch.linalg.norm(points - closest_points, dim=1)
+        radius = torch.max(dists)
+
+    return {'start': p1.unsqueeze(0), 'end': p2.unsqueeze(0), 'radius': radius * padding_factor}
+
+def _rotation_matrix_between_vectors(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the rotation matrix that rotates unit vector 'a' to unit vector 'b'.
+
+    This implementation is based on Rodrigues' rotation formula and is robust
+    to parallel and anti-parallel vectors.
+
+    Args:
+        a (torch.Tensor): The starting unit vector (shape: 3).
+        b (torch.Tensor): The target unit vector (shape: 3).
+
+    Returns:
+        torch.Tensor: The 3x3 rotation matrix that performs the transformation.
+    """
+    # Ensure inputs are on the same device and are normalized
+    a = torch.nn.functional.normalize(a, dim=0)
+    b = torch.nn.functional.normalize(b, dim=0)
+    
+    # The axis of rotation is the cross product of the two vectors
+    v = torch.cross(a, b)
+    
+    # The sine of the angle is the norm of the cross product
+    s = torch.linalg.norm(v)
+    
+    # The cosine of the angle is the dot product
+    c = torch.dot(a, b)
+    
+    # --- Handle Edge Cases ---
+    
+    # If the vectors are nearly parallel (cross product is close to zero)
+    if s < 1e-8:
+        # If they are pointing in the same direction (cosine is 1)
+        if c > 0:
+            # The rotation is the identity matrix
+            return torch.eye(3, device=a.device, dtype=a.dtype)
+        # If they are pointing in opposite directions (cosine is -1)
+        else:
+            # The rotation is 180 degrees. A simple way to represent this
+            # is with a matrix that inverts the vector.
+            # A more general 180-degree rotation can be found, but -I is a valid one.
+            # For a more stable 180-degree rotation matrix that works for any axis:
+            # Find an arbitrary perpendicular vector 'u'
+            u = torch.tensor([1.0, 0.0, 0.0], device=a.device, dtype=a.dtype)
+            if torch.abs(torch.dot(a, u)) > 0.99:
+                 u = torch.tensor([0.0, 1.0, 0.0], device=a.device, dtype=a.dtype)
+            u = torch.nn.functional.normalize(torch.cross(a, u), dim=0)
+            # Rodrigues' formula for 180 degrees simplifies to 2*u*u^T - I
+            return 2 * torch.outer(u, u) - torch.eye(3, device=a.device, dtype=a.dtype)
+
+    # --- Standard Case (Rodrigues' Rotation Formula) ---
+    
+    # Skew-symmetric cross-product matrix of v
+    vx = torch.tensor([[ 0.0, -v[2],  v[1]],
+                       [ v[2],  0.0, -v[0]],
+                       [-v[1],  v[0],  0.0]], device=a.device, dtype=a.dtype)
+                       
+    # Rodrigues' formula: R = I + sin(θ)*K + (1-cos(θ))*K^2
+    # Where K is the skew-symmetric matrix of the *unit* axis k = v/s.
+    # A more direct formula using v, s, and c is:
+    # R = I + vx + vx^2 * ( (1-c) / s^2 )
+    
+    R = torch.eye(3, device=a.device, dtype=a.dtype) + vx + (vx @ vx) * ((1 - c) / (s**2))
+    
+    return R
+
+def create_watertight_capsule_trimesh(capsule_params, sections: int = 16) -> trimesh.Trimesh:
+    """
+    Creates a guaranteed watertight capsule mesh using Trimesh's boolean union operations.
+    Args:
+        sections (int): The number of sections for the cylinder and spheres.
+
+    Returns:
+        trimesh.Trimesh: A single, watertight Trimesh object representing the capsule.
+    """
+    # 1. Create the three primitive components as separate Trimesh objects
+    # Create a cylinder. Ensure it has caps for the boolean operation to work.
+    radius = capsule_params['radius'].squeeze()
+    p_start = capsule_params['start'].squeeze()
+    p_end = capsule_params['end'].squeeze()
+    height = torch.linalg.norm(p_end - p_start).item()
+    cylinder = trimesh.creation.cylinder(radius=radius, height=height, sections=sections)
+
+    # Create two spheres for the end caps
+    sphere1 = trimesh.creation.icosphere(subdivisions=3, radius=radius)
+    sphere2 = sphere1.copy()
+
+    # 2. Position the spheres correctly at the ends of the cylinder
+    sphere1.apply_translation([0, 0, height / 2])
+    sphere2.apply_translation([0, 0, -height / 2])
+    
+    # 3. Perform a boolean union of the three parts.
+    #    Trimesh's boolean operations are robust and will correctly
+    #    remove all internal faces and stitch the geometry together,
+    #    resulting in a watertight mesh.
+    
+    # Union the cylinder with the first sphere
+    capsule = trimesh.boolean.union([cylinder, sphere1])
+    
+    # Union the result with the second sphere
+    capsule = trimesh.boolean.union([capsule, sphere2])
+    
+    # The result of a boolean operation is typically watertight, but a final
+    # process() call can clean up any minor artifacts.
+    capsule.process()
+    capsule_mesh_local_z = capsule
+    
+    # 3. Calculate the transformation to align and position the capsule
+    transform_matrix = torch.eye(4)
+    if height > 1e-6:
+        # Find rotation
+        z_axis = torch.tensor([0.0, 0.0, 1.0])
+        target_axis = torch.nn.functional.normalize(p_end - p_start, dim=0)
+        rotation_matrix = _rotation_matrix_between_vectors(z_axis, target_axis)
+        transform_matrix[:3, :3] = rotation_matrix
+    
+    # Find translation (center of the capsule)
+    center_translation = (p_start + p_end) / 2.0
+    transform_matrix[:3, 3] = center_translation
+
+    # 4. Apply the transform to the local Z-aligned capsule
+    capsule_mesh_local_z.apply_transform(transform_matrix.cpu().numpy())
+    
+    # 5. Store the final collision geometry
+    c_verts = torch.from_numpy(capsule_mesh_local_z.vertices).to(dtype=torch.float)
+    c_faces = torch.from_numpy(capsule_mesh_local_z.faces).to(dtype=torch.long)
+    return c_verts, c_faces
+
+class HandRobotWrapper:
 
     def __init__(self, robot_name: str, urdf_path: str, mesh_path: str, device=None,
                  n_surface_points=2000,
@@ -133,7 +333,6 @@ class HandRobotWrapper(RobotWrapper):
         # ---------------------------------------------------------------------- #
         # 1. Pinocchio 初始化 (来自 RobotWrapper)
         # ---------------------------------------------------------------------- #
-        super().__init__(urdf_path)
         self.robot_name = robot_name
 
         # ---------------------------------------------------------------------- #
@@ -147,9 +346,9 @@ class HandRobotWrapper(RobotWrapper):
 
         self.chain = pk.build_chain_from_urdf(open(urdf_path, "rb").read()).to(dtype=torch.float, device=self.device)
         self.n_dofs = len(self.chain.get_joint_parameter_names())
-        self.pin2pk = np.array([
-            self.dof_joint_names.index(n) for n in self.chain.get_joint_parameter_names()
-            ])
+        # self.pin2pk = np.array([
+        #     self.dof_joint_names.index(n) for n in self.chain.get_joint_parameter_names()
+        #     ])
         self.current_status = None
 
         # ---------------------------------------------------------------------- #
@@ -199,173 +398,6 @@ class HandRobotWrapper(RobotWrapper):
                     vertices = torch.from_numpy(np.asarray(link_mesh.vertices)).to(dtype=torch.float, device=self.device)
                     faces = torch.from_numpy(np.asarray(link_mesh.triangles)).to(dtype=torch.long, device=self.device)
 
-
-                    def fit_capsule_to_points(points: torch.Tensor, padding_factor: float = 1.05):
-                        """
-                        Fits an arbitrarily oriented capsule to a point cloud using Principal Component Analysis (PCA).
-
-                        This function finds the axis of greatest variance in the point cloud to define the
-                        capsule's orientation and length, then finds the maximum distance from that axis
-                        to define the radius.
-
-                        Args:
-                            points (torch.Tensor): A tensor of points with shape (N, 3), where N is the number of vertices.
-                            padding_factor (float): A small factor to slightly enlarge the capsule's radius,
-                                                    ensuring it fully encloses the original mesh.
-
-                        Returns:
-                            Dict[str, torch.Tensor or float]: A dictionary containing the capsule parameters:
-                                - 'start': The start point of the capsule's core segment, shape (1, 3).
-                                - 'end': The end point of the capsule's core segment, shape (1, 3).
-                                - 'radius': The calculated radius of the capsule (float).
-                        """
-                        if points.shape[0] < 3:
-                            # Cannot determine a capsule from fewer than 3 points. Return a small sphere at the center.
-                            center = torch.mean(points, dim=0, keepdim=True) if points.shape[0] > 0 else torch.zeros(1, 3, device=points.device)
-                            return {'start': center, 'end': center, 'radius': 0.01}
-
-                        # 1. Center the points by subtracting their mean
-                        mean = torch.mean(points, dim=0)
-                        centered_points = points - mean
-
-                        # 2. Perform Singular Value Decomposition (SVD) to find principal components
-                        # V will contain the principal axes (eigenvectors) of the point cloud's covariance matrix.
-                        # Note: torch.svd is deprecated, using torch.linalg.svd is recommended.
-                        U, S, Vh = torch.linalg.svd(centered_points)
-                        V = Vh.T
-                        
-                        # The first principal component is the direction of greatest variance (the capsule's main axis)
-                        direction = V[:, 0]
-
-                        # 3. Project all points onto this principal axis to find the extent of the capsule
-                        projections = torch.matmul(centered_points, direction)
-                        min_proj = torch.min(projections)
-                        max_proj = torch.max(projections)
-
-                        # 4. Define the start and end points of the capsule's core segment in world space
-                        p1 = mean + min_proj * direction
-                        p2 = mean + max_proj * direction
-
-                        # 5. Calculate the radius. This is the maximum distance from any point
-                        #    to the central line segment defined by p1 and p2.
-                        line_vec = p2 - p1
-                        line_len_sq = torch.dot(line_vec, line_vec)
-
-                        if line_len_sq < 1e-8:
-                            # The points form a sphere, not an elongated shape. The capsule is a sphere.
-                            p2 = p1  # The line segment is just a point.
-                            dists_to_center = torch.linalg.norm(points - p1, dim=1)
-                            radius = torch.max(dists_to_center)
-                        else:
-                            # For each point, find the closest point on the line segment p1-p2
-                            t = torch.clamp(torch.matmul(points - p1, line_vec) / line_len_sq, 0.0, 1.0)
-                            closest_points_on_line = p1.unsqueeze(0) + t.unsqueeze(1) * line_vec.unsqueeze(0)
-                            
-                            # The radius is the maximum distance from any original point to its closest point on the line
-                            dists_to_line = torch.linalg.norm(points - closest_points_on_line, dim=1)
-                            radius = torch.max(dists_to_line)
-
-                        return {
-                            'start': p1.unsqueeze(0),
-                            'end': p2.unsqueeze(0),
-                            'radius': radius.item() * padding_factor
-                        }
-                    
-
-                    def _rotation_matrix_between_vectors(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-                        """
-                        Computes the rotation matrix that rotates unit vector 'a' to unit vector 'b'.
-                        
-                        Args:
-                            a (torch.Tensor): The starting unit vector (shape: 3).
-                            b (torch.Tensor): The target unit vector (shape: 3).
-
-                        Returns:
-                            torch.Tensor: The 3x3 rotation matrix.
-                        """
-                        # Ensure vectors are unit vectors
-                        a = torch.nn.functional.normalize(a, dim=0)
-                        b = torch.nn.functional.normalize(b, dim=0)
-                        
-                        v = torch.cross(a, b)
-                        s = torch.linalg.norm(v)
-                        c = torch.dot(a, b)
-                        
-                        # Handle the case where vectors are parallel or anti-parallel
-                        if s < 1e-8:
-                            # If vectors are in the same direction, return identity
-                            if c > 0:
-                                return torch.eye(3, device=a.device, dtype=a.dtype)
-                            # If vectors are in opposite directions, return 180-degree rotation
-                            else:
-                                return -torch.eye(3, device=a.device, dtype=a.dtype)
-
-                        vx = torch.tensor([[ 0.0, -v[2],  v[1]],
-                                        [ v[2],  0.0, -v[0]],
-                                        [-v[1],  v[0],  0.0]], device=a.device, dtype=a.dtype)
-                                        
-                        R = torch.eye(3, device=a.device, dtype=a.dtype) + vx + vx @ vx * ((1 - c) / (s**2))
-                        return R
-
-
-                    def create_capsule_mesh(capsule_params: dict, resolution: int = 20):
-                        """
-                        Generates vertices and faces for a 3D mesh that represents an arbitrarily oriented capsule.
-
-                        Args:
-                            capsule_params (dict): A dictionary containing capsule parameters.
-                            resolution (int): The resolution of the generated cylinder and spheres.
-
-                        Returns:
-                            Tuple[np.ndarray, np.ndarray]: vertices and faces of the capsule mesh.
-                        """
-                        p_start = capsule_params['start']
-                        p_end = capsule_params['end']
-                        radius = capsule_params['radius']
-
-                        line_vec = p_end.squeeze() - p_start.squeeze()
-                        height = torch.linalg.norm(line_vec)
-
-                        if height > 1e-6:
-                            cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius=radius, height=height.item(), resolution=resolution)
-                        else:
-                            cylinder = o3d.geometry.TriangleMesh()
-                        
-                        sphere1 = o3d.geometry.TriangleMesh.create_sphere(radius=radius, resolution=resolution).translate([0, 0, height.item() / 2])
-                        sphere2 = o3d.geometry.TriangleMesh.create_sphere(radius=radius, resolution=resolution).translate([0, 0, -height.item() / 2])
-                        base_capsule_mesh = cylinder + sphere1 + sphere2
-
-                        # --- CORRECTED ROTATION CALCULATION ---
-                        
-                        z_axis = torch.tensor([0.0, 0.0, 1.0], device=p_start.device, dtype=torch.float)
-                        
-                        # Handle the zero-height case (sphere)
-                        if height < 1e-6:
-                            rotation_matrix = torch.eye(3, device=p_start.device, dtype=torch.float)
-                        else:
-                            target_axis = torch.nn.functional.normalize(line_vec, dim=0)
-                            # Use our new, correct helper function
-                            rotation_matrix = _rotation_matrix_between_vectors(z_axis, target_axis)
-                        
-                        translation_vector = (p_start.squeeze() + p_end.squeeze()) / 2.0
-                        
-                        transform_matrix = torch.eye(4, device=p_start.device, dtype=torch.float)
-                        transform_matrix[:3, :3] = rotation_matrix
-                        transform_matrix[:3, 3] = translation_vector
-
-                        base_verts_torch = torch.from_numpy(np.asarray(base_capsule_mesh.vertices)).to(dtype=torch.float, device=p_start.device)
-                        base_verts_h = torch.cat([base_verts_torch, torch.ones(base_verts_torch.shape[0], 1, device=p_start.device)], dim=1)
-                        transformed_verts_h = torch.matmul(transform_matrix, base_verts_h.T).T
-                        
-                        final_vertices = transformed_verts_h[:, :3].cpu().numpy()
-                        final_faces = np.asarray(base_capsule_mesh.triangles)
-
-                        return torch.from_numpy(final_vertices).to(dtype=torch.float), torch.from_numpy(final_faces).to(dtype=torch.long, device=self.device)
-
-
-                    capsule_params = fit_capsule_to_points(vertices)
-                    vertices, faces = create_capsule_mesh(capsule_params, resolution=40)
-                    
                     pos = visual.offset.to(dtype=torch.float, device=self.device)
                     vertices = pos.transform_points(vertices)
                     link_vertices.append(vertices)
@@ -390,6 +422,16 @@ class HandRobotWrapper(RobotWrapper):
 
                 self.mesh[link_name]['face_verts'] = index_vertices_by_faces(link_vertices, link_faces)
                 areas[link_name] = trimesh.Trimesh(link_vertices.cpu().numpy(), link_faces.cpu().numpy()).area.item()
+
+                if link_name.endswith("distal") or link_name.endswith("proximal") or link_name.endswith("middle"):
+                    # --- APPROXIMATE FINGER USING A CAPSULE ---
+                    # print(f"Approximating finger link '{link_name}' with a capsule.")
+                    capsule_params = fit_capsule_to_points(link_vertices)
+                    c_verts, c_faces = create_watertight_capsule_trimesh(capsule_params, sections=16)
+                    
+                    self.mesh[link_name]['c_vertices'] = c_verts
+                    self.mesh[link_name]['c_faces'] = c_faces
+                    self.mesh[link_name]['c_face_verts'] = index_vertices_by_faces(c_verts, c_faces)
 
             for children in body.children:
                 build_mesh_recurse(children)
@@ -457,6 +499,8 @@ class HandRobotWrapper(RobotWrapper):
         self.penetration_keypoints = torch.cat(penetration_keypoints_list, dim=0)
         self.n_keypoints = self.penetration_keypoints.shape[0]
 
+        # self.sdf = pv.RobotSDF(self.chain, path_prefix=mesh_path)
+
 
     def get_joint_world_coordinates_dict(self) -> Dict[str, torch.Tensor]:
         """
@@ -515,6 +559,7 @@ class HandRobotWrapper(RobotWrapper):
         """
         qpos: (T, n, ) 关节位置, support batch operation
         """
+        self.qpos = qpos
         self.current_status = self.chain.forward_kinematics(qpos)
 
     # -------------------------------------------------------------------------- #
@@ -722,8 +767,11 @@ class HandRobotWrapper(RobotWrapper):
         points: (N, `n_contact_candidates`, 3) torch.Tensor
             contact candidates
         """
-        points = [self.current_status[link_name].transform_points(self.mesh[link_name]['contact_candidates']) for link_name in self.mesh]
-        return torch.cat(points, dim=0)
+        points = [
+            self.current_status[link_name].transform_points(self.mesh[link_name]['contact_candidates'])
+            for link_name in self.mesh if self.mesh[link_name]['contact_candidates'].shape[0] > 0
+        ]
+        return torch.cat(points, dim=-2)
 
     def get_intersect(self, M)->bool:
         """
@@ -743,8 +791,6 @@ class HandRobotWrapper(RobotWrapper):
         for idx in range(M):
             hand_mesh = self.get_trimesh_data(idx)
             points = self.ref_points
-            oritation = np.array([0, 1, 1.]).repeat(points.shape[0], axis=0).reshape((-1, 3))
-            tt = trimesh.ray.ray_pyembree.RayMeshIntersector(hand_mesh)
             _, index_ray0 = tt.intersects_id(ray_origins=points, ray_directions=oritation, multiple_hits=True, return_locations=False)
             _, index_ray1 = tt.intersects_id(ray_origins=points, ray_directions=-oritation)
             count0 = np.bincount(index_ray0)
@@ -909,21 +955,17 @@ class HandRobotWrapper(RobotWrapper):
             obj_points_tensor = obj_points_tensor.unsqueeze(0)  # Shape becomes (1, N, 3)
 
         batch_size = obj_points_tensor.shape[0]
-        
         per_link_sdf_list = []
-        links_to_ignore = {
-            'forearm', 'wrist', 'ffknuckle', 'mfknuckle', 'rfknuckle', 'lfknuckle', 'thbase', 'thhub'
-        }
+        
+        names = [link_name for link_name in self.mesh if link_name.endswith("distal") or link_name.endswith("proximal") or link_name.endswith("middle")]
+        for link_name in names:
 
-        for link_name, link_data in self.mesh.items():
-            if link_name in links_to_ignore:
-                continue
-
-            face_verts = self.current_status[link_name].transform_points(link_data['face_verts'])
+            link_data = self.mesh[link_name]
+            obj_points_local_tensor = self.current_status[link_name].inverse().transform_points(obj_points_tensor)
             batch_signed_dist_list = []
             for b in range(batch_size):
                 # compute_sdf expects (N, 3) and (F, 3, 3)
-                dist_sq, signs, _, _ = compute_sdf(obj_points_tensor[b].to('cuda'), face_verts.to('cuda'))
+                dist_sq, signs, _, _ = compute_sdf(obj_points_local_tensor[b].to('cuda'), link_data['c_face_verts'].to('cuda'))
                 signed_dist = torch.sqrt(dist_sq.clamp(min=1e-8)) * (-signs)
                 batch_signed_dist_list.append(signed_dist)
             
@@ -951,7 +993,7 @@ class HandRobotWrapper(RobotWrapper):
         penetration_matrix = torch.relu(pointwise_max_sdf)
 
         # 2. Calculate the final energy (the mean of all positive SDF values)
-        penetration_energy = penetration_matrix.mean()
+        penetration_energy = penetration_matrix.sum()
 
         # 3. If the user doesn't want the points, we can return early.
         if not return_penetrating_points:
@@ -960,21 +1002,22 @@ class HandRobotWrapper(RobotWrapper):
 
         # 4. Find the indices of the penetrating points for EACH batch item
         # penetration_mask will be a boolean tensor of shape (B, N)
-        penetration_mask = pointwise_max_sdf > 0
+        inner_mask = pointwise_max_sdf > 0
+        outer_mask = pointwise_max_sdf <= 0
 
         # We can't directly index with a boolean mask for batched data to get a ragged tensor.
         # Instead, we return a list of tensors, one for each batch item.
         obj_points_tensor = obj_points_tensor.to(dtype=torch.float, device='cpu')
-        penetration_mask = penetration_mask.to(dtype=torch.bool, device='cpu')
-        penetrating_points = torch.stack([
-            obj_points_tensor[b][penetration_mask[b]] for b in range(batch_size)
-        ])
-        
-        # If the original input was not batched, we return a single tensor.
-        # Otherwise, we return the list of tensors.
-        final_penetrating_points = penetrating_points.squeeze(0)
+        inner_mask = inner_mask.to(dtype=torch.bool, device='cpu')
+        inner_points = torch.stack([
+            obj_points_tensor[b][inner_mask[b]] for b in range(batch_size)
+        ]).squeeze(0)
+        outer_mask = outer_mask.to(dtype=torch.bool, device='cpu')
+        outer_points = torch.stack([
+            obj_points_tensor[b][outer_mask[b]] for b in range(batch_size)
+        ]).squeeze(0)
 
-        return penetration_energy, final_penetrating_points
+        return penetration_energy, inner_points, outer_points
 
     def cal_object_penetration_approx(self, obj_points: torch.Tensor, object_normal: torch.Tensor) -> torch.Tensor:
         """
