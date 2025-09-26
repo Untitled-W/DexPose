@@ -3,7 +3,7 @@ logs
 vis_results
 *_old
 wandb
-thirdparty
+tmp
 
 0912_ignore
 0912vis

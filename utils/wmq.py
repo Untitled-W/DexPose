@@ -1283,6 +1283,7 @@ def vis_dexhand_optimize(
     inner_pen_pts: List[np.ndarray] = None,
     outer_pen_pts: List[np.ndarray] = None,
 ):
+    print(inner_pen_pts[0].shape, inner_pen_pts[1].shape)
     """
     Creates a comprehensive, multi-frame animation to visualize the results of a DexHand optimization process.
 
@@ -1346,11 +1347,17 @@ def vis_dexhand_optimize(
             - **Shape**: A NumPy array of shape `(T, M, 3)`, where `M` is the number of self-penetration points.
             - **Visualization**: Large lime-green (`#ACC313`) markers.
 
-        pen_pt_ls (List[np.ndarray], optional):
-            - **Description**: Points from the object that are detected to be penetrating the hand mesh.
+        inner_pen_pts (List[np.ndarray], optional):
+            - **Description**: Points from the object that are detected to be in the hand mesh.
               This is useful for visualizing the object-penetration energy term.
-            - **Shape**: A List of T NumPy array of shape `(Q, 3)`, where `Q` is the number of penetrating points.
-            - **Visualization**: Medium-sized brown markers.
+            - **Shape**: A List of T NumPy array of shape `(Q, 3)`, where `Q` is the number of inner penetrating points.
+            - **Visualization**: Medium-sized dark brown markers.
+
+        outer_pen_pts (List[np.ndarray], optional):
+            - **Description**: Points from the object that are near the hand mesh surface.
+              This is useful for visualizing the object-penetration energy term.
+            - **Shape**: A List of T NumPy array of shape `(R, 3)`, where `R` is the number of outer penetrating points.
+            - **Visualization**: Medium-sized light brown markers.
     """
     T = 0
     potential_time_series_args = [
@@ -1428,3 +1435,4 @@ def vis_dexhand_optimize(
     fig = go.Figure(data=initial_data, layout=layout, frames=frames)
     fig.write_html(f"{filename}.html")
     print(f"Optimization visualization saved to {filename}.html")
+

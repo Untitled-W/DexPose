@@ -102,16 +102,9 @@ class RobotWrapper:
         J = pin.computeFrameJacobian(self.model, self.data, qpos, link_id)
         return J
 
-
-import torch
-import numpy as np
-import trimesh
-import open3d as o3d
-
 # =========================================================================
 # HELPER FUNCTIONS
 # =========================================================================
-
 
 def fit_capsule_to_points_wrong(points: torch.Tensor, padding_factor: float = 1.05):
     """
@@ -304,13 +297,129 @@ def create_watertight_capsule_trimesh(capsule_params, sections: int = 16) -> tri
     c_faces = torch.from_numpy(capsule_mesh_local_z.faces).to(dtype=torch.long)
     return c_verts, c_faces
 
+def sdf_capsule_analytical_batch_torch(
+    query_points: torch.Tensor, capsule_params: dict
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Computes the analytical Signed Distance Field (SDF) for an arbitrarily oriented capsule,
+    batched for query_points. This function is fully differentiable with respect to all inputs.
+
+    Args:
+        query_points (torch.Tensor): A tensor of points to query, shape (N, 3).
+        capsule_params (dict): A dictionary containing capsule parameters.
+            - 'start' (torch.Tensor): The start point of the capsule's core segment, shape (1, 3) or (3,).
+            - 'end' (torch.Tensor): The end point of the capsule's core segment, shape (1, 3) or (3,).
+            - 'radius' (torch.Tensor): The radius of the capsule, a scalar tensor.
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]:
+            - sdf_values (torch.Tensor): The signed distance for each query point.
+              Convention: Negative inside, positive outside. Shape (N,).
+            - signs (torch.Tensor): The sign of the distance for each query point.
+              -1 for inside, +1 for outside. Shape (N,).
+    """
+    p_start = capsule_params['start'].squeeze()  # Shape (3,)
+    p_end = capsule_params['end'].squeeze()      # Shape (3,)
+    radius = capsule_params['radius'].squeeze()  # Shape ()
+
+    # Ensure p_start and p_end are broadcastable with query_points
+    # p_start, p_end will be (1, 3) for broadcasting
+    p_start_unsqueeze = p_start.unsqueeze(0)
+    p_end_unsqueeze = p_end.unsqueeze(0)
+
+    line_vec = p_end_unsqueeze - p_start_unsqueeze  # Shape (1, 3)
+    line_len_sq = torch.sum(line_vec * line_vec, dim=-1, keepdim=True) # Shape (1, 1)
+
+    # Project each query point onto the infinite line defined by p_start and line_vec.
+    # t = dot(query - start, line_vec) / dot(line_vec, line_vec)
+    # (N, 3) - (1, 3) -> (N, 3)
+    # (N, 3) @ (3, 1) -> (N, 1) if line_vec was (3,1), but it's (1,3)
+    # Using element-wise product and sum for dot product with broadcasting
+    t = torch.sum((query_points - p_start_unsqueeze) * line_vec, dim=-1, keepdim=True) / line_len_sq # Shape (N, 1)
+
+    # Clamp 't' to the range [0, 1] to find the closest point on the *segment*.
+    t_clamped = torch.clamp(t, 0.0, 1.0) # Shape (N, 1)
+
+    # Calculate the closest point on the line segment for each query point.
+    # (1, 3) + (N, 1) * (1, 3) -> (N, 3)
+    closest_points_on_line = p_start_unsqueeze + t_clamped * line_vec # Shape (N, 3)
+
+    # The distance from each query point to the line segment is the norm of the difference vector.
+    # (N, 3) - (N, 3) -> (N, 3)
+    # torch.linalg.norm(..., dim=-1) -> (N,)
+    dist_to_segment = torch.linalg.norm(query_points - closest_points_on_line, dim=-1) # Shape (N,)
+
+    # The final SDF is the distance to the segment, minus the radius.
+    # (N,) - () -> (N,) (radius broadcasts)
+    sdf_values = dist_to_segment - radius
+
+    # The sign is simply the sign of the SDF value.
+    signs = torch.sign(sdf_values) # Shape (N,)
+
+    return sdf_values
+
+def sdf_capsule_analytical_torch(
+    query_points: torch.Tensor, capsule_params: dict
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Computes the analytical Signed Distance Field (SDF) for an arbitrarily oriented capsule.
+    This function is fully differentiable with respect to all inputs.
+
+    Args:
+        query_points (torch.Tensor): A tensor of points to query, shape (N, 3).
+        p_start (torch.Tensor): The start point of the capsule's core segment, shape (1, 3) or (3,).
+        p_end (torch.Tensor): The end point of the capsule's core segment, shape (1, 3) or (3,).
+        radius (torch.Tensor): The radius of the capsule, a scalar tensor.
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]:
+            - sdf_values (torch.Tensor): The signed distance for each query point.
+              Convention: Negative inside, positive outside. Shape (N,).
+            - signs (torch.Tensor): The sign of the distance for each query point.
+              -1 for inside, +1 for outside. Shape (N,).
+    """
+    p_start = capsule_params['start'].squeeze()
+    p_end = capsule_params['end'].squeeze()
+    radius = capsule_params['radius'].squeeze()
+    line_vec = p_end - p_start
+    line_len_sq = torch.dot(line_vec, line_vec)
+    
+    # Project each query point onto the infinite line defined by p_start and line_vec.
+    # The parameter 't' represents the normalized position along the line.
+    # t = dot(query - start, line_vec) / dot(line_vec, line_vec)
+    t = torch.matmul(query_points - p_start, line_vec) / line_len_sq
+    
+    # Clamp 't' to the range [0, 1] to find the closest point on the *segment*.
+    t_clamped = torch.clamp(t, 0.0, 1.0)
+    
+    # Calculate the closest point on the line segment for each query point.
+    # This uses broadcasting: (1, 3) + (N, 1) * (1, 3) -> (N, 3)
+    closest_points_on_line = p_start.unsqueeze(0) + t_clamped.unsqueeze(1) * line_vec.unsqueeze(0)
+    
+    # The distance from each query point to the line segment is the norm of the difference vector.
+    dist_to_segment = torch.linalg.norm(query_points - closest_points_on_line, dim=-1)
+    
+    # The final SDF is the distance to the segment, minus the radius.
+    sdf_values = dist_to_segment - radius
+    
+    # The sign is simply the sign of the SDF value.
+    signs = torch.sign(sdf_values)
+    
+    return sdf_values
+
+
+# =========================================================================
+# HELPER FUNCTIONS
+# =========================================================================
+
+
 class HandRobotWrapper:
 
     def __init__(self, robot_name: str, urdf_path: str, mesh_path: str, device=None,
                  n_surface_points=2000,
-                 penetration_points_path='/home/qianxu/Desktop/Project/interaction_pose/mjcf/penetration_points.json',
-                 contact_points_path='/home/qianxu/Desktop/Project/interaction_pose/mjcf/contact_points.json',
-                 fingertip_points_path='/home/qianxu/Desktop/Project/interaction_pose/mjcf/fingertip.json',
+                 penetration_points_path='./retarget_wmq/mjcf/penetration_points.json',
+                 contact_points_path='./retarget_wmq/mjcf/contact_points.json',
+                 fingertip_points_path='./retarget_wmq/mjcf/fingertip.json',
                  tip_aug=None):
         """
         初始化函数
@@ -432,6 +541,7 @@ class HandRobotWrapper:
                     self.mesh[link_name]['c_vertices'] = c_verts
                     self.mesh[link_name]['c_faces'] = c_faces
                     self.mesh[link_name]['c_face_verts'] = index_vertices_by_faces(c_verts, c_faces)
+                    self.mesh[link_name]['capsule_params'] = capsule_params
 
             for children in body.children:
                 build_mesh_recurse(children)
@@ -501,6 +611,131 @@ class HandRobotWrapper:
 
         # self.sdf = pv.RobotSDF(self.chain, path_prefix=mesh_path)
 
+    def compute_forward_kinematics(self, qpos: torch.Tensor):
+        """
+        qpos: (T, n, ) 关节位置, support batch operation
+        """
+        self.qpos = qpos
+        self.current_status = self.chain.forward_kinematics(qpos)
+
+    # ---------------------------------------- #
+    #       Mesh Queries                       #
+    # ---------------------------------------- #
+
+    def get_trimesh_data_old(self):
+        """
+        Get full mesh
+        Deprecated: use get_trimesh_data_single or get_trimesh_data instead.
+
+        Returns
+        -------
+        data: trimesh.Trimesh
+        """
+        data = trimesh.Trimesh()
+        for link_name in self.mesh:
+            v = self.current_status[link_name].transform_points(
+                self.mesh[link_name]['vertices'])
+            v = v.detach().cpu()
+            f = self.mesh[link_name]['faces'].detach().cpu()
+            data += trimesh.Trimesh(vertices=v, faces=f)
+        return data
+   
+    def get_trimesh_data_single(self, frame_id, collision=False) -> o3d.geometry.TriangleMesh:
+        """
+        Gets the combined Open3D mesh for a SINGLE pose.
+        This function assumes `compute_forward_kinematics` was called with a 
+        non-batched or batch-of-1 qpos.
+        
+        Returns:
+            o3d.geometry.TriangleMesh: A single mesh object.
+        """
+        full_mesh = o3d.geometry.TriangleMesh()
+        
+        for link_name in self.mesh:
+            # For a single pose, the transform object is used directly
+            # transform_points will return vertices of shape (N, 3)
+            if collision and 'c_vertices' in self.mesh[link_name]:
+                v_tensor = self.current_status[link_name][frame_id].transform_points(
+                    self.mesh[link_name]['c_vertices'])
+            else:
+                v_tensor = self.current_status[link_name][frame_id].transform_points(
+                    self.mesh[link_name]['vertices'])
+
+            # If input was batched (T=1), squeeze out the batch dim
+            if v_tensor.dim() == 3:
+                v_tensor = v_tensor.squeeze(0)
+
+            v_numpy = v_tensor.detach().cpu().numpy()
+            if collision and 'c_faces' in self.mesh[link_name]:
+                f_numpy = self.mesh[link_name]['c_faces'].detach().cpu().numpy()
+            else:
+                f_numpy = self.mesh[link_name]['faces'].detach().cpu().numpy()
+
+            link_mesh = o3d.geometry.TriangleMesh(
+                vertices=o3d.utility.Vector3dVector(v_numpy),
+                triangles=o3d.utility.Vector3iVector(f_numpy)
+            )
+            full_mesh += link_mesh
+            
+        full_mesh = full_mesh.simplify_vertex_clustering(voxel_size=0.005)
+        full_mesh.compute_vertex_normals()
+
+        return full_mesh
+
+    def get_trimesh_data(self) -> List[o3d.geometry.TriangleMesh]:
+        """
+        Gets a list of combined Open3D meshes for a BATCH of poses.
+        This function assumes `compute_forward_kinematics` was called with a
+        batched qpos of shape (T, n).
+
+        Returns:
+            List[o3d.geometry.TriangleMesh]: A list of T mesh objects, where each
+                                             mesh corresponds to a pose in the batch.
+        """
+        # 1. Determine the batch size (T) from the stored transformations
+        # We can peek at any link's status to find the length.
+        if not self.mesh or self.current_status is None:
+            return []
+        first_link_name = next(iter(self.mesh))
+        batch_size = len(self.current_status[first_link_name])
+
+        batch_meshes = []
+        # 2. Iterate through each pose in the batch (from 0 to T-1)
+        # for t in tqdm(range(batch_size), desc="Generating meshes for batch poses"):
+        for t in range(batch_size):
+            # For each pose, create one combined mesh
+            full_mesh_for_t = o3d.geometry.TriangleMesh()
+
+            # 3. Iterate through each link for the current pose 't'
+            for link_name in self.mesh:
+                # Get the transformation for the current link AND current time step 't'
+                transform_for_t = self.current_status[link_name][t]
+
+                # Apply the single transformation to the link's local vertices
+                v_tensor = transform_for_t.transform_points(self.mesh[link_name]['vertices'])
+                
+                # The result is already (N, 3), perfect for a single mesh
+                v_numpy = v_tensor.detach().cpu().numpy()
+                f_numpy = self.mesh[link_name]['faces'].detach().cpu().numpy()
+
+                link_mesh = o3d.geometry.TriangleMesh(
+                    vertices=o3d.utility.Vector3dVector(v_numpy),
+                    triangles=o3d.utility.Vector3iVector(f_numpy)
+                )
+                full_mesh_for_t += link_mesh
+            
+            # 4. Post-process the combined mesh for this single time step
+            full_mesh_for_t = full_mesh_for_t.simplify_vertex_clustering(voxel_size=0.005)
+            full_mesh_for_t.compute_vertex_normals()
+
+            # 5. Add the completed mesh for this time step to our results list
+            batch_meshes.append(full_mesh_for_t)
+
+        return batch_meshes
+
+    # ---------------------------------------- #
+    #       Point Queries                      #
+    # ---------------------------------------- #
 
     def get_joint_world_coordinates_dict(self) -> Dict[str, torch.Tensor]:
         """
@@ -554,144 +789,13 @@ class HandRobotWrapper:
 
         return joint_coords
 
-
-    def compute_forward_kinematics(self, qpos: torch.Tensor):
-        """
-        qpos: (T, n, ) 关节位置, support batch operation
-        """
-        self.qpos = qpos
-        self.current_status = self.chain.forward_kinematics(qpos)
-
-    # -------------------------------------------------------------------------- #
-    #  基于 PyTorch Kinematics/3D 的工具函数 (来自 HandModelMJCF)
-    # -------------------------------------------------------------------------- #
-    def get_trimesh_data_o(self):
-        """
-        Get full mesh
-        Deprecated: use get_trimesh_data_single or get_trimesh_data instead.
-
-        Returns
-        -------
-        data: trimesh.Trimesh
-        """
-        data = trimesh.Trimesh()
-        for link_name in self.mesh:
-            v = self.current_status[link_name].transform_points(
-                self.mesh[link_name]['vertices'])
-            v = v.detach().cpu()
-            f = self.mesh[link_name]['faces'].detach().cpu()
-            data += trimesh.Trimesh(vertices=v, faces=f)
-        return data
-    
-
-    def get_trimesh_data_single(self) -> o3d.geometry.TriangleMesh:
-        """
-        Gets the combined Open3D mesh for a SINGLE pose.
-        This function assumes `compute_forward_kinematics` was called with a 
-        non-batched or batch-of-1 qpos.
-        
-        Returns:
-            o3d.geometry.TriangleMesh: A single mesh object.
-        """
-        full_mesh = o3d.geometry.TriangleMesh()
-        
-        for link_name in self.mesh:
-            # For a single pose, the transform object is used directly
-            # transform_points will return vertices of shape (N, 3)
-            v_tensor = self.current_status[link_name].transform_points(
-                self.mesh[link_name]['vertices'])
-            
-            # If input was batched (T=1), squeeze out the batch dim
-            if v_tensor.dim() == 3:
-                v_tensor = v_tensor.squeeze(0)
-
-            v_numpy = v_tensor.detach().cpu().numpy()
-            f_numpy = self.mesh[link_name]['faces'].detach().cpu().numpy()
-
-            link_mesh = o3d.geometry.TriangleMesh(
-                vertices=o3d.utility.Vector3dVector(v_numpy),
-                triangles=o3d.utility.Vector3iVector(f_numpy)
-            )
-            full_mesh += link_mesh
-            
-        full_mesh = full_mesh.simplify_vertex_clustering(voxel_size=0.005)
-        full_mesh.compute_vertex_normals()
-
-        return full_mesh
-
-
-    def get_trimesh_data(self) -> List[o3d.geometry.TriangleMesh]:
-        """
-        Gets a list of combined Open3D meshes for a BATCH of poses.
-        This function assumes `compute_forward_kinematics` was called with a
-        batched qpos of shape (T, n).
-
-        Returns:
-            List[o3d.geometry.TriangleMesh]: A list of T mesh objects, where each
-                                             mesh corresponds to a pose in the batch.
-        """
-        # 1. Determine the batch size (T) from the stored transformations
-        # We can peek at any link's status to find the length.
-        if not self.mesh or self.current_status is None:
-            return []
-        first_link_name = next(iter(self.mesh))
-        batch_size = len(self.current_status[first_link_name])
-
-        batch_meshes = []
-        # 2. Iterate through each pose in the batch (from 0 to T-1)
-        # for t in tqdm(range(batch_size), desc="Generating meshes for batch poses"):
-        for t in range(batch_size):
-            # For each pose, create one combined mesh
-            full_mesh_for_t = o3d.geometry.TriangleMesh()
-
-            # 3. Iterate through each link for the current pose 't'
-            for link_name in self.mesh:
-                # Get the transformation for the current link AND current time step 't'
-                transform_for_t = self.current_status[link_name][t]
-
-                # Apply the single transformation to the link's local vertices
-                v_tensor = transform_for_t.transform_points(self.mesh[link_name]['vertices'])
-                
-                # The result is already (N, 3), perfect for a single mesh
-                v_numpy = v_tensor.detach().cpu().numpy()
-                f_numpy = self.mesh[link_name]['faces'].detach().cpu().numpy()
-
-                link_mesh = o3d.geometry.TriangleMesh(
-                    vertices=o3d.utility.Vector3dVector(v_numpy),
-                    triangles=o3d.utility.Vector3iVector(f_numpy)
-                )
-                full_mesh_for_t += link_mesh
-            
-            # 4. Post-process the combined mesh for this single time step
-            full_mesh_for_t = full_mesh_for_t.simplify_vertex_clustering(voxel_size=0.005)
-            full_mesh_for_t.compute_vertex_normals()
-
-            # 5. Add the completed mesh for this time step to our results list
-            batch_meshes.append(full_mesh_for_t)
-
-        return batch_meshes
-
-
-    def get_surface_points(self):
-        """
-        Get surface points
-        
-        Returns
-        -------
-        points: (`n_surface_points`, 3)
-            surface points
-        """
-        points = [self.current_status[link_name].transform_points(self.mesh[link_name]['surface_points']) for link_name in self.mesh]
-        return torch.cat(points, dim=0)
-
-
     def get_all_joints_in_mano_order(self):
         """
         Get all joints in MANO order.
 
         Returns
         -------
-        points: (`batch_size`, 16, 3)
+        points: (`batch_size`, 21, 3)
             all joints in MANO order
         """
         joint_names_mano_order = [
@@ -724,6 +828,21 @@ class HandRobotWrapper:
         points = torch.stack(points, dim=-2)
         return points
 
+    def get_surface_points(self):
+        """
+        Get surface points
+        
+        Returns
+        -------
+        points: (`n_surface_points`, 3)
+            surface points
+        """
+        points = [
+            self.current_status[link_name].transform_points(self.mesh[link_name]['surface_points'])
+            for link_name in self.mesh if self.mesh[link_name]['surface_points'].shape[0] > 0
+        ]
+        return torch.cat(points, dim=-2)
+
     def get_align_points(self):
         """
         Get aligned points.
@@ -741,7 +860,6 @@ class HandRobotWrapper:
 
     def get_tip_points(self):
         return self.get_align_points()[..., [8, 1, 3, 5, 7], :]
-
 
     def get_penetration_keypoints(self):
         """
@@ -773,35 +891,39 @@ class HandRobotWrapper:
         ]
         return torch.cat(points, dim=-2)
 
-    def get_intersect(self, M)->bool:
-        """
-        Get intersection between the hand and the object
+    # def get_intersect_(self, M)->bool:
+    #     """
+    #     Get intersection between the hand and the object
         
-        Parameters
-        ----------
-        points: (N, 3)
-            surface points
+    #     Parameters
+    #     ----------
+    #     points: (N, 3)
+    #         surface points
         
-        Returns
-        -------
-        intersect: (bool )
-            whether the hand intersects with the object
-        """
-        num_ls = []
-        for idx in range(M):
-            hand_mesh = self.get_trimesh_data(idx)
-            points = self.ref_points
-            _, index_ray0 = tt.intersects_id(ray_origins=points, ray_directions=oritation, multiple_hits=True, return_locations=False)
-            _, index_ray1 = tt.intersects_id(ray_origins=points, ray_directions=-oritation)
-            count0 = np.bincount(index_ray0)
-            count1 = np.bincount(index_ray1)
-            bool_0 = count0 % 2 != 0
-            bool_1 = count1 % 2 != 0
-            bool = np.logical_or(bool_0, bool_1)
-            num = np.count_nonzero(bool)
-            num_ls.append(num)
-        num_ls = torch.tensor(num_ls).to(self.device)
-        return num_ls
+    #     Returns
+    #     -------
+    #     intersect: (bool )
+    #         whether the hand intersects with the object
+    #     """
+    #     num_ls = []
+    #     for idx in range(M):
+    #         hand_mesh = self.get_trimesh_data(idx)
+    #         points = self.ref_points
+    #         _, index_ray0 = tt.intersects_id(ray_origins=points, ray_directions=oritation, multiple_hits=True, return_locations=False)
+    #         _, index_ray1 = tt.intersects_id(ray_origins=points, ray_directions=-oritation)
+    #         count0 = np.bincount(index_ray0)
+    #         count1 = np.bincount(index_ray1)
+    #         bool_0 = count0 % 2 != 0
+    #         bool_1 = count1 % 2 != 0
+    #         bool = np.logical_or(bool_0, bool_1)
+    #         num = np.count_nonzero(bool)
+    #         num_ls.append(num)
+    #     num_ls = torch.tensor(num_ls).to(self.device)
+    #     return num_ls
+
+    # ------------------------------------------ #
+    #       Energy Queries                       #
+    # ------------------------------------------ #
 
     def cal_distance(self, obj_points, object_normal, return_idx=False):
         """
@@ -905,7 +1027,7 @@ class HandRobotWrapper:
 
         return penetration_penalty
 
-    def get_E_joints(self):
+    def get_E_joints_(self):
         """
         Calculate joint energy
         
@@ -919,7 +1041,7 @@ class HandRobotWrapper:
             torch.sum((qpos < self.joints_lower[6:]) * (self.joints_lower[6:] - qpos), dim=-1)
         return E_joints
 
-    def cal_object_penetration(
+    def cal_object_penetration_TorchSDF(
         self, 
         obj_points, 
         return_penetrating_points: bool = False
@@ -1009,13 +1131,107 @@ class HandRobotWrapper:
         # Instead, we return a list of tensors, one for each batch item.
         obj_points_tensor = obj_points_tensor.to(dtype=torch.float, device='cpu')
         inner_mask = inner_mask.to(dtype=torch.bool, device='cpu')
-        inner_points = torch.stack([
+        inner_points = [
             obj_points_tensor[b][inner_mask[b]] for b in range(batch_size)
-        ]).squeeze(0)
+        ]
         outer_mask = outer_mask.to(dtype=torch.bool, device='cpu')
-        outer_points = torch.stack([
+        outer_points = [
             obj_points_tensor[b][outer_mask[b]] for b in range(batch_size)
-        ]).squeeze(0)
+        ]
+
+        return penetration_energy, inner_points, outer_points
+
+    def cal_object_penetration(
+        self, 
+        obj_points, 
+        return_penetrating_points: bool = False
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        """
+        计算物体点云到手部表面网格的穿透能量。
+
+        该函数通过计算SDF（符号距离场）来衡量穿透。
+        SDF的符号约定为：手部网格内部为正，外部为负。
+
+        Args:
+            obj_points (torch.Tensor): 
+                在世界坐标系下的物体表面点云，形状为 (B, N, 3) 或 (N, 3)，
+                其中 B 是批次大小，N 是点的数量。
+            return_penetrating_points (bool, optional):
+                如果为 True，函数将额外返回穿透点的坐标。默认为 False。
+
+        Returns:
+            torch.Tensor: 
+                一个标量张量，表示总的穿透惩罚能量。
+            or
+            Tuple[torch.Tensor, torch.Tensor]:
+                如果 return_penetrating_points 为 True，则返回一个元组：
+                - penetration_energy (torch.Tensor): 穿透能量。
+                - penetrating_points (torch.Tensor): 穿透点的坐标，形状为 (K, 3)，
+                其中 K 是穿透点的数量。如果处理的是批处理数据，则返回
+                形状为 (B, K, 3) 的张量。
+        """
+        # --- Input Handling: Ensure obj_points has a batch dimension for consistency ---
+        obj_points_tensor = torch.from_numpy(obj_points).to(dtype=torch.float, device=self.device)
+        is_batched = obj_points_tensor.dim() == 3
+        if not is_batched:
+            obj_points_tensor = obj_points_tensor.unsqueeze(0)  # Shape becomes (1, N, 3)
+
+        batch_size = obj_points_tensor.shape[0]
+        per_link_sdf_list = []
+        
+        names = [link_name for link_name in self.mesh if link_name.endswith("distal") or link_name.endswith("proximal") or link_name.endswith("middle")]
+        for link_name in names:
+
+            link_data = self.mesh[link_name]
+            obj_points_local_tensor = self.current_status[link_name].inverse().transform_points(obj_points_tensor)
+            
+            signed_dist = sdf_capsule_analytical_batch_torch(obj_points_local_tensor, link_data['capsule_params'])
+            per_link_sdf_list.append(-signed_dist)
+
+        if not per_link_sdf_list:
+            energy = torch.tensor(0.0, device=self.device)
+            if return_penetrating_points:
+                # Return an empty tensor with correct shape if no points are penetrating
+                empty_points = torch.empty(batch_size, 0, 3, device=self.device)
+                return energy, empty_points if is_batched else empty_points.squeeze(0)
+            return energy
+
+        # all_sdfs shape: (num_links, B, num_obj_points)
+        all_sdfs = torch.stack(per_link_sdf_list, dim=0)
+
+        # We need to find max over links (dim=0)
+        # pointwise_max_sdf shape: (B, num_obj_points)
+        pointwise_max_sdf, _ = torch.max(all_sdfs, dim=0)
+
+        # --- This is where the new logic is added ---
+
+        # 1. Calculate the penetration penalty matrix
+        penetration_matrix = torch.relu(pointwise_max_sdf)
+
+        # 2. Calculate the final energy (the mean of all positive SDF values)
+        penetration_energy = penetration_matrix.sum()
+
+        # 3. If the user doesn't want the points, we can return early.
+        if not return_penetrating_points:
+            # If input was not batched, we shouldn't change the original function's return type
+            return penetration_energy
+
+        # 4. Find the indices of the penetrating points for EACH batch item
+        # penetration_mask will be a boolean tensor of shape (B, N)
+        inner_mask = pointwise_max_sdf > 0
+        outer_mask = pointwise_max_sdf <= 0
+
+        # We can't directly index with a boolean mask for batched data to get a ragged tensor.
+        # Instead, we return a list of tensors, one for each batch item.
+        obj_points_tensor = obj_points_tensor.to(dtype=torch.float, device='cpu')
+        inner_mask = inner_mask.to(dtype=torch.bool, device='cpu')
+        inner_points = [
+            obj_points_tensor[b][inner_mask[b]] for b in range(batch_size)
+        ]
+        outer_mask = outer_mask.to(dtype=torch.bool, device='cpu')
+        outer_points = [
+            obj_points_tensor[b][outer_mask[b]] for b in range(batch_size)
+        ]
 
         return penetration_energy, inner_points, outer_points
 

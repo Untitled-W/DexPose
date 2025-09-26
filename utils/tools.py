@@ -605,7 +605,7 @@ from typing import List
 
 def apply_transformation_on_object_mesh(
     meshes: List[o3d.geometry.TriangleMesh],
-    transformation: torch.Tensor
+    transformation: torch.Tensor,
 ) -> List[List[o3d.geometry.TriangleMesh]]:
     """
     对一系列Open3D网格应用一系列变换。

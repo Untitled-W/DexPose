@@ -216,13 +216,73 @@ def sdf_capsule_analytical_torch(
     
     return sdf_values
 
+def sdf_capsule_analytical_batch_torch(
+    query_points: torch.Tensor, capsule_params: dict
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Computes the analytical Signed Distance Field (SDF) for an arbitrarily oriented capsule,
+    batched for query_points. This function is fully differentiable with respect to all inputs.
+
+    Args:
+        query_points (torch.Tensor): A tensor of points to query, shape (N, 3).
+        capsule_params (dict): A dictionary containing capsule parameters.
+            - 'start' (torch.Tensor): The start point of the capsule's core segment, shape (1, 3) or (3,).
+            - 'end' (torch.Tensor): The end point of the capsule's core segment, shape (1, 3) or (3,).
+            - 'radius' (torch.Tensor): The radius of the capsule, a scalar tensor.
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]:
+            - sdf_values (torch.Tensor): The signed distance for each query point.
+              Convention: Negative inside, positive outside. Shape (N,).
+            - signs (torch.Tensor): The sign of the distance for each query point.
+              -1 for inside, +1 for outside. Shape (N,).
+    """
+    p_start = capsule_params['start'].squeeze()  # Shape (3,)
+    p_end = capsule_params['end'].squeeze()      # Shape (3,)
+    radius = capsule_params['radius'].squeeze()  # Shape ()
+
+    # Ensure p_start and p_end are broadcastable with query_points
+    # p_start, p_end will be (1, 3) for broadcasting
+    p_start_unsqueeze = p_start.unsqueeze(0)
+    p_end_unsqueeze = p_end.unsqueeze(0)
+
+    line_vec = p_end_unsqueeze - p_start_unsqueeze  # Shape (1, 3)
+    line_len_sq = torch.sum(line_vec * line_vec, dim=-1, keepdim=True) # Shape (1, 1)
+
+    # Project each query point onto the infinite line defined by p_start and line_vec.
+    # t = dot(query - start, line_vec) / dot(line_vec, line_vec)
+    # (N, 3) - (1, 3) -> (N, 3)
+    # (N, 3) @ (3, 1) -> (N, 1) if line_vec was (3,1), but it's (1,3)
+    # Using element-wise product and sum for dot product with broadcasting
+    t = torch.sum((query_points - p_start_unsqueeze) * line_vec, dim=-1, keepdim=True) / line_len_sq # Shape (N, 1)
+
+    # Clamp 't' to the range [0, 1] to find the closest point on the *segment*.
+    t_clamped = torch.clamp(t, 0.0, 1.0) # Shape (N, 1)
+
+    # Calculate the closest point on the line segment for each query point.
+    # (1, 3) + (N, 1) * (1, 3) -> (N, 3)
+    closest_points_on_line = p_start_unsqueeze + t_clamped * line_vec # Shape (N, 3)
+
+    # The distance from each query point to the line segment is the norm of the difference vector.
+    # (N, 3) - (N, 3) -> (N, 3)
+    # torch.linalg.norm(..., dim=-1) -> (N,)
+    dist_to_segment = torch.linalg.norm(query_points - closest_points_on_line, dim=-1) # Shape (N,)
+
+    # The final SDF is the distance to the segment, minus the radius.
+    # (N,) - () -> (N,) (radius broadcasts)
+    sdf_values = dist_to_segment - radius
+
+    # The sign is simply the sign of the SDF value.
+    signs = torch.sign(sdf_values) # Shape (N,)
+
+    return sdf_values
 
 if __name__ == "__main__":
 
     # 1. Fit a capsule to the finger segment's visual vertices
     data = []
 
-    link_vertices = (torch.rand(100, 3) - 0.5) * 0.05  # Replace with actual vertices
+    link_vertices = torch.cat([(torch.rand(100, 1) - 0.5) * 0.05, (torch.rand(100, 1) - 0.5) * 0.005, (torch.rand(100, 1) - 0.5) * 0.01], dim=1)
     capsule_params = fit_capsule_to_points(link_vertices)
 
     # 2. Create a watertight, Z-axis aligned capsule mesh using our helper
@@ -246,13 +306,16 @@ if __name__ == "__main__":
     grid_x, grid_y, grid_z = np.meshgrid(grid_range, grid_range, grid_range, indexing='ij')
     grid_points_local_np = np.vstack([grid_x.ravel(), grid_y.ravel(), grid_z.ravel()]).T
     grid_points_local_torch = torch.from_numpy(grid_points_local_np).to(dtype=torch.float)
+    grid_points_local_torch = grid_points_local_torch.expand(10, -1, -1)
     grid_points_local_torch = grid_points_local_torch.contiguous()
 
-    sdf_values = sdf_capsule_analytical_torch(grid_points_local_torch, capsule_params)
+    sdf_values = sdf_capsule_analytical_batch_torch(grid_points_local_torch, capsule_params)
+    sdf_values = sdf_values[3]
 
     # from torchsdf import compute_sdf
-    dist_sq, signs, _, _ = compute_sdf(grid_points_local_torch.to('cuda'), c_face_verts.to('cuda'))
-    sdf_values = torch.sqrt(dist_sq.clamp(min=1e-8)) * (signs)
+    # dist_sq, signs, _, _ = compute_sdf(grid_points_local_torch.to('cuda'), c_face_verts.to('cuda'))
+    # sdf_values = torch.sqrt(dist_sq.clamp(min=1e-8)) * (signs)
+    
     sdf_values = sdf_values.detach().cpu().numpy()
 
     # 4. Normalize the SDF values to a [0, 1] opacity scale
@@ -350,7 +413,6 @@ if __name__ == "__main__":
         line=dict(color='cyan', width=2),
         name='Face Normals',
     ))
-    
     
     layout = go.Layout(
         scene=dict(
