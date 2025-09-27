@@ -925,7 +925,7 @@ class HandRobotWrapper:
     #       Energy Queries                       #
     # ------------------------------------------ #
 
-    def cal_distance(self, obj_points, object_normal, return_idx=False):
+    def cal_distance(self, obj_points, object_normal, dis_thres, return_idx=False):
         """
         计算接触点到物体表面的投影距离。
 
@@ -934,7 +934,7 @@ class HandRobotWrapper:
             object_normal (torch.Tensor): 物体表面点云对应的法线向量，形状为 [B, N, 3]。
 
         Returns:
-            torch.Tensor: 一个标量张量，表示平均距离。
+            torch.Tensor: 一个标量张量，表示**平均距离**。
         """
         contact_points = self.get_contact_candidates()
         if contact_points.dim() == 2:
@@ -958,7 +958,10 @@ class HandRobotWrapper:
         nearest_normals = torch.gather(expanded_obj_normals, 1, index_for_gather)
         vector = contact_points - nearest_obj_points # 形状: [M, 3]
         signed_distance = (vector * nearest_normals.detach()).sum(dim=-1) # 形状: [M] 我们使用 detach() 来防止梯度流向法线向量
-        distance = torch.abs(signed_distance).mean()
+        # distance = torch.abs(signed_distance).mean()
+        mask = signed_distance < dis_thres
+        signed_distance = signed_distance[mask]
+        distance = torch.square(signed_distance).mean()
         
         if return_idx:
             return distance, contact_points, nearest_obj_points
@@ -1144,6 +1147,7 @@ class HandRobotWrapper:
     def cal_object_penetration(
         self, 
         obj_points, 
+        thres,
         return_penetrating_points: bool = False
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
@@ -1206,7 +1210,7 @@ class HandRobotWrapper:
         # --- This is where the new logic is added ---
 
         # 1. Calculate the penetration penalty matrix
-        penetration_matrix = torch.relu(pointwise_max_sdf)
+        penetration_matrix = torch.relu(pointwise_max_sdf - thres)
 
         # 2. Calculate the final energy (the mean of all positive SDF values)
         penetration_energy = penetration_matrix.sum()
@@ -1218,8 +1222,8 @@ class HandRobotWrapper:
 
         # 4. Find the indices of the penetrating points for EACH batch item
         # penetration_mask will be a boolean tensor of shape (B, N)
-        inner_mask = pointwise_max_sdf > 0
-        outer_mask = pointwise_max_sdf <= 0
+        inner_mask = pointwise_max_sdf > thres
+        outer_mask = pointwise_max_sdf <= thres
 
         # We can't directly index with a boolean mask for batched data to get a ragged tensor.
         # Instead, we return a list of tensors, one for each batch item.
@@ -1234,59 +1238,6 @@ class HandRobotWrapper:
         ]
 
         return penetration_energy, inner_points, outer_points
-
-    def cal_object_penetration_approx(self, obj_points: torch.Tensor, object_normal: torch.Tensor) -> torch.Tensor:
-        """
-        使用物体法线和KNN，近似计算物体到手部的穿透能量。
-
-        这是一种速度更快但精度较低的替代方法，它不计算真实的SDF。
-        它计算的是从每个物体点到最近的手部表面采样点的距离，
-        并将其投影到物体法线上。
-
-        Args:
-            obj_points (torch.Tensor): 
-                世界坐标系下的物体点云，形状为 (N, 3)。
-            object_normal (torch.Tensor): 
-                对应的物体表面法线，形状为 (N, 3)。
-
-        Returns:
-            torch.Tensor: 
-                一个标量张量，表示总的近似穿透能量。
-        """
-        # 1. 获取当前姿态下，手部所有的表面采样点
-        # 形状为 (M, 3)，M 是手部表面点总数
-        hand_surface_points = self.get_surface_points()
-
-        if hand_surface_points.shape[0] == 0:
-            return torch.tensor(0.0, device=self.device)
-
-        # 2. 为每个物体点找到最近的手部表面点
-        # knn_points 需要一个 batch 维度
-        # obj_points (p1): [1, N, 3]
-        # hand_surface_points (p2): [1, M, 3]
-        knn_result = knn_points(obj_points.unsqueeze(0), hand_surface_points.unsqueeze(0), K=1)
-
-        # knn_result.idx 的形状是 [1, N, 1]，包含了最近邻点的索引
-        # 我们去掉多余的维度，得到形状为 [N] 的索引张量
-        nearest_indices = knn_result.idx[0, :, 0] # 形状: [N]
-
-        # 提取出那些最近的手部表面点
-        nearest_hand_points = hand_surface_points[nearest_indices] # 形状: [N, 3]
-
-        # 3. 计算从物体点指向手部点的向量
-        vector = nearest_hand_points - obj_points # 形状: [N, 3]
-
-        # 4. 将向量投影到物体法线上
-        # 点积 (A * B).sum(-1) 得到投影长度（带符号）
-        # 如果手部点在法线“内部”方向，投影为负值。
-        # 我们关心的是穿透，即手部点在法线“外部”的情况，所以我们取反。
-        penetration_depth = -(vector * object_normal.detach()).sum(dim=-1)
-
-        # 5. 计算总能量，只考虑正值（实际穿透）
-        penetration_energy = torch.relu(penetration_depth).sum()
-
-        return penetration_energy
-    
 
 
 

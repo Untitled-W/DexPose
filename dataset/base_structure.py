@@ -15,27 +15,9 @@ from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate
 from pytorch3d.transforms import matrix_to_axis_angle, axis_angle_to_matrix, quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
 import joblib
 
-WMQ_IS_USING = False
+WMQ_IS_USING = True
 
 if WMQ_IS_USING:
-
-    # ORIGIN_DATA_PATH = {
-    #     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco",
-    #     "Oakinkv2": '/home/qianxu/Desktop/New_Folder/OakInk2/OakInk-v2-hub',
-    #     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
-    # }
-
-    # HUMAN_SEQ_PATH = {
-    #     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/human_save",
-    #     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/human_save",
-    #     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data/human_save'
-    # }
-
-    # DEX_SEQ_PATH = {
-    #     "Taco": "/home/qianxu/Desktop/Project/interaction_pose/data/Taco/dex_save",
-    #     "Oakinkv2": "/home/qianxu/Desktop/Project/interaction_pose/data/Oakinkv2/dex_save",
-    #     'DexYCB': '/home/qianxu/Desktop/Project/interaction_pose/thirdparty_module/dex-retargeting/data'
-    # }
 
     data_root = '/home/qianxu/Desktop/Project/DexPose/data'
 
@@ -46,9 +28,9 @@ if WMQ_IS_USING:
     }
 
     HUMAN_SEQ_PATH = {
-        "Taco": os.path.join(data_root, "Taco", "human_save"),
-        "Oakinkv2": os.path.join(data_root, "Oakinkv2", "human_save"),
-        'DexYCB': os.path.join(data_root, 'DexYCB', 'human_save')
+        "Taco": os.path.join(data_root, "Taco", "human_save0927"),
+        "Oakinkv2": os.path.join(data_root, "Oakinkv2", "human_save0927"),
+        'DexYCB': os.path.join(data_root, 'DexYCB', 'human_save0927')
     }
 
     DEX_SEQ_PATH = {
@@ -487,6 +469,7 @@ class BaseDatasetProcessor(ABC):
         hand_thetas_rot6d = matrix_to_rotation_6d(quaternion_to_matrix(hand_coeffs))
         assert end_idx - start_idx == contact_indices.shape[0], \
             f"Mismatch in sequence length: {end_idx - start_idx} vs {contact_indices.shape[0]}"
+        
         sequence_data = {
             f'{side}h_joints': hand_joints.cpu()[start_idx:end_idx], # (T, 21, 3)
             f'{side}o_transf': obj_transf_ls[0][start_idx:end_idx].cpu(), # [(T, 4, 4), ...]
@@ -503,8 +486,8 @@ class BaseDatasetProcessor(ABC):
             f'{r_side}o_normals': None,  # Placeholder for normals if not available
 
             'contact_indices': contact_indices.cpu(),
-            'mesh_path': object_mesh_path_ls,
-            'side': 1 if side == 'r' else 0,  # 1 for right, 0 for left
+            'object_mesh_path': object_mesh_path_ls,
+            'side': side, # 1 if side == 'r' else 0,  # 1 for right, 0 for left
             'task_desc': self._get_task_description(raw_data),
             'seq_len': hand_joints.shape[0],
             'which_dataset': raw_data['which_dataset'],

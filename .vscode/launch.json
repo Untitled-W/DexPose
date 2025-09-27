@@ -9,7 +9,7 @@
             "name": "retarget_wmq",
             "type": "debugpy",
             "request": "launch",
-            "module": "retarget.retarget_wmq",
+            "module": "retarget_wmq.retarget_wmq",
             "python": "${command:python.interpreterPath}"
         },
         {

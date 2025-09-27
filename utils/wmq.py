@@ -1184,7 +1184,7 @@ def _vis_dexhand_optimize_frame(
         faces = np.asarray(mesh_item.triangles if hasattr(mesh_item, "triangles") else mesh_item.faces)
         data.append(go.Mesh3d(x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
                               i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
-                              color="#E1B685", opacity=0.5, name="Robot Hand Mesh"))
+                              color="#E1B685", opacity=0.9, name="Robot Hand Mesh"))
 
     # 4. Plot Object Mesh
     if obj_mesh is not None:
@@ -1283,7 +1283,6 @@ def vis_dexhand_optimize(
     inner_pen_pts: List[np.ndarray] = None,
     outer_pen_pts: List[np.ndarray] = None,
 ):
-    print(inner_pen_pts[0].shape, inner_pen_pts[1].shape)
     """
     Creates a comprehensive, multi-frame animation to visualize the results of a DexHand optimization process.
 

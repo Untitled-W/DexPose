@@ -875,11 +875,19 @@ def vis_pc_coor_plotly(
 def visualize_human_sequence(seq_data, filename: Optional[str] = None):
     
     ##  Visualize Object Point Clouds ##
-    pc = get_point_clouds_from_human_data(seq_data)
-    pc_ls = apply_transformation_human_data(pc, seq_data["obj_poses"])
+    if 'side' in seq_data:
+        pc = seq_data[f"{seq_data['side']}o_points"] # (1000, 3)
+        transf = seq_data[f"{seq_data['side']}o_transf"] # (123, 4, 4)        \
+        pc_ls = apply_transformation_human_data([pc], transf.unsqueeze(0))
+    else:
+        pc = get_point_clouds_from_human_data(seq_data)
+        pc_ls = apply_transformation_human_data(pc, seq_data["obj_poses"])
 
     ## Extract Hand Points and Mesh ##
-    mano_hand_joints, hand_verts = extract_hand_points_and_mesh(seq_data["hand_tsls"], seq_data["hand_coeffs"], seq_data["side"])
+    if 'side' in seq_data:
+        mano_hand_joints = seq_data[f"{seq_data['side']}h_joints"]
+    else:
+        mano_hand_joints, hand_verts = extract_hand_points_and_mesh(seq_data["hand_tsls"], seq_data["hand_coeffs"], seq_data["side"])
 
     # Visualize using vis_frames_plotly
     vis_frames_plotly(

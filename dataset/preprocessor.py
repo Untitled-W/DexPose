@@ -765,7 +765,7 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
     
     dataset_data = {}
     for data in human_data:
-        dataset_name = data.which_dataset
+        dataset_name = data["which_dataset"]
         if dataset_name not in dataset_data:
             dataset_data[dataset_name] = []
         dataset_data[dataset_name].append(data)
@@ -773,10 +773,10 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
     for dataset_name, data_list in dataset_data.items():
         print(f"Dataset {dataset_name} has {len(data_list)} sequences")
         # Sample a few sequences for visualization
-        sampled_data = random.sample(zip(data_list,range(len(data_list))), 5)
+        sampled_data = random.sample(list(zip(data_list,range(len(data_list)))), 5)
         # sampled_data = data_list
         for (d, idx) in sampled_data:
-            visualize_human_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/dataset/vis_results/({idx})_{d.which_dataset}_{d.which_sequence}_{d.side}')
+            visualize_human_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/dataset/logs/0927/({idx})_{d["which_dataset"]}_{d["which_sequence"]}_{d["side"]}')
 
 if __name__ == "__main__":
 
@@ -786,7 +786,7 @@ if __name__ == "__main__":
     # dataset_names = ['oakinkv2']
     processed_data = []
     
-    GENERATE = True
+    GENERATE = False
     if GENERATE:
         setup_logging()
         processed_data = process_multiple_datasets(dataset_names)
