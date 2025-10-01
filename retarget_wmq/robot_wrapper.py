@@ -6,10 +6,8 @@ import json
 import os
 import open3d as o3d
 import pytorch_kinematics as pk
-import pytorch_volumetric as pv
 import pytorch3d.ops
 import pytorch3d.structures
-from torchsdf import index_vertices_by_faces, compute_sdf
 from pytorch3d.ops.knn import knn_points
 import torch
 import trimesh
@@ -105,6 +103,34 @@ class RobotWrapper:
 # =========================================================================
 # HELPER FUNCTIONS
 # =========================================================================
+
+def index_vertices_by_faces(vertices_features, faces):
+    r"""Index vertex features to convert per vertex tensor to per vertex per face tensor.
+
+    Args:
+        vertices_features (torch.FloatTensor):
+            vertices features, of shape
+            :math:`(\text{batch_size}, \text{num_points}, \text{knum})`,
+            ``knum`` is feature dimension, the features could be xyz position,
+            rgb color, or even neural network features.
+        faces (torch.LongTensor):
+            face index, of shape :math:`(\text{num_faces}, \text{num_vertices})`.
+    Returns:
+        (torch.FloatTensor):
+            the face features, of shape
+            :math:`(\text{batch_size}, \text{num_faces}, \text{num_vertices}, \text{knum})`.
+    """
+    assert vertices_features.ndim == 2, \
+        "vertices_features must have 2 dimensions of shape (batch_sizenum_points, knum)"
+    assert faces.ndim == 2, "faces must have 2 dimensions of shape (num_faces, num_vertices)"
+    # input = vertices_features.unsqueeze(2).expand(-1, -1, faces.shape[-1], -1)
+    # indices = faces[None, ..., None].expand(
+    #     vertices_features.shape[0], -1, -1, vertices_features.shape[-1])
+    # return torch.gather(input=input, index=indices, dim=1)
+    input = vertices_features.reshape(-1, 1, 3).expand(-1, faces.shape[-1], -1)
+    indices = faces[..., None].expand(
+        -1, -1, vertices_features.shape[-1])
+    return torch.gather(input=input, index=indices, dim=0)
 
 def fit_capsule_to_points_wrong(points: torch.Tensor, padding_factor: float = 1.05):
     """
@@ -1244,7 +1270,7 @@ class HandRobotWrapper:
 def load_robot(robot_name) -> HandRobotWrapper:
 
     assert robot_name in ['shadow_hand', 'inspire_hand', 'ability_hand', 'dclaw_gripper', 'panda_gripper', 'schunk_svh_hand', 'schunk_hand', 'allegro_hand', 'barrett_hand', 'leap_hand'], f"Robot {robot_name} not supported."
-    hand_asset_root = os.path.join("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands", robot_name)
+    hand_asset_root = os.path.join("/home/wangminqi/workspace/test/packages/hands", robot_name)
     side = "right"
     robot = HandRobotWrapper(robot_name, os.path.join(hand_asset_root, f'new_{side}_glb.urdf'),
                     os.path.join(hand_asset_root, f'meshes'),

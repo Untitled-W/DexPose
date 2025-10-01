@@ -22,7 +22,7 @@ from manotorch.manolayer import ManoLayer
 
 from .base_structure import BaseDatasetProcessor, DatasetRegistry, HumanSequenceData, ORIGIN_DATA_PATH, HUMAN_SEQ_PATH
 from utils.tools import apply_transformation_pt
-from utils.vis_utils import visualize_human_sequence
+from utils.vis_utils import visualize_human_sequence, vis_as_frame
 from utils.dexycb_dataset import DexYCBVideoDataset, YCB_CLASSES
 
 
@@ -565,7 +565,7 @@ DATASET_CONFIGS = {
         'task_interval': 20,
         'which_dataset': 'Oakinkv2',
         'seq_data_name': 'feature',
-        'sequence_indices': list(range(120, 130))  # Example sequence indices for processing
+        'sequence_indices': None
     },
     
     'taco': {
@@ -585,7 +585,7 @@ DATASET_CONFIGS = {
         'task_interval': 1,
         'which_dataset': 'DexYCB',
         'seq_data_name': 'feature',
-        'sequence_indices': list(range(120, 130))  # Example sequence indices for 
+        'sequence_indices': None
     }
 }
 
@@ -772,11 +772,12 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
 
     for dataset_name, data_list in dataset_data.items():
         print(f"Dataset {dataset_name} has {len(data_list)} sequences")
-        # Sample a few sequences for visualization
-        sampled_data = random.sample(list(zip(data_list,range(len(data_list)))), 5)
-        # sampled_data = data_list
-        for (d, idx) in sampled_data:
-            visualize_human_sequence(d, f'/home/qianxu/Desktop/Project/DexPose/dataset/logs/0927/({idx})_{d["which_dataset"]}_{d["which_sequence"]}_{d["side"]}')
+        
+        # sampled_data = random.sample(list(zip(data_list,range(len(data_list)))), 5)
+        sampled_data = list(zip(data_list,range(len(data_list))))
+        # for (d, idx) in sampled_data:
+            # visualize_human_sequence(d, f'/home/wangminqi/workspace/test/DexPose/dataset/logs/({idx})_{d["which_dataset"]}_{d["which_sequence"]}_{d["side"]}')
+        vis_as_frame(data_list[:5], f'/home/wangminqi/workspace/test/DexPose/dataset/logs/{dataset_name}_human', [0, 30, 60, 61])
 
 if __name__ == "__main__":
 
@@ -789,7 +790,7 @@ if __name__ == "__main__":
     GENERATE = False
     if GENERATE:
         setup_logging()
-        processed_data = process_multiple_datasets(dataset_names)
+        processed_data = process_multiple_datasets(dataset_names, )#[{'sequence_indices': list(range(5))}])
     else:
         for dataset_name in dataset_names:
             file_path = os.path.join(DATASET_CONFIGS[dataset_name]['save_path'],f'seq_{DATASET_CONFIGS[dataset_name]["seq_data_name"]}_{DATASET_CONFIGS[dataset_name]["task_interval"]}.p')

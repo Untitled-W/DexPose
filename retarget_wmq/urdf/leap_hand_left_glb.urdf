@@ -51,7 +51,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/palm_lower_left.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/palm_lower_left.glb"/>
       </geometry>
       <origin xyz="-0.0955 -0.117 0.0207" rpy="1.57079 0.0 3.14159"/>
     </visual>
@@ -124,7 +124,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/mcp_joint.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/mcp_joint.glb"/>
       </geometry>
       <origin xyz="0.0084 0.0077 0.01465" rpy="0.0 0.0 0.0"/>
     </visual>
@@ -173,7 +173,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/pip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/pip.glb"/>
       </geometry>
       <origin xyz="0.0096 0.0002 0.0007" rpy="-1.5707900000096782 -1.5707899999927801 9.67825588725589e-12"/>
     </visual>
@@ -192,7 +192,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/dip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/dip.glb"/>
       </geometry>
       <origin xyz="0.0211 -0.0084 0.0097" rpy="-3.1415926 2.220446049250313e-16 3.2814284336339646e-24"/>
     </visual>
@@ -235,7 +235,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/fingertip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/fingertip.glb"/>
       </geometry>
       <origin xyz="0.0132 -0.0061 0.0144" rpy="3.1415926 2.220446049250313e-16 -3.2814284336339646e-24"/>
     </visual>
@@ -259,7 +259,7 @@
     </collision>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/collision/white_tip.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/collision/white_tip.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -272,7 +272,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/mcp_joint.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/mcp_joint.glb"/>
       </geometry>
       <origin xyz="0.0084 0.0077 0.01465" rpy="0.0 0.0 0.0"/>
     </visual>
@@ -321,7 +321,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/pip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/pip.glb"/>
       </geometry>
       <origin xyz="0.0096 0.0003 0.0007" rpy="-1.5707900000096782 -1.5707899999927801 9.67825588725589e-12"/>
     </visual>
@@ -340,7 +340,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/dip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/dip.glb"/>
       </geometry>
       <origin xyz="0.0211 -0.0084 0.0097" rpy="-3.14159 2.220446049250313e-16 1.6248551233397535e-22"/>
     </visual>
@@ -383,7 +383,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/fingertip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/fingertip.glb"/>
       </geometry>
       <origin xyz="0.0132 -0.0061 0.0145" rpy="3.14159 2.220446049250313e-16 -1.6248551233397535e-22"/>
     </visual>
@@ -407,7 +407,7 @@
     </collision>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/collision/white_tip.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/collision/white_tip.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -420,7 +420,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/mcp_joint.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/mcp_joint.glb"/>
       </geometry>
       <origin xyz="0.0084 0.0077 0.01465" rpy="0.0 0.0 0.0"/>
     </visual>
@@ -469,7 +469,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/pip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/pip.glb"/>
       </geometry>
       <origin xyz="0.0096 0.0003 0.0007" rpy="-1.5707900000096782 -1.5707899999927801 9.67825588725589e-12"/>
     </visual>
@@ -488,7 +488,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/dip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/dip.glb"/>
       </geometry>
       <origin xyz="0.0211 -0.0084 0.0097" rpy="-3.14159 2.220446049250313e-16 1.6248551233397535e-22"/>
     </visual>
@@ -531,7 +531,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/fingertip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/fingertip.glb"/>
       </geometry>
       <origin xyz="0.0132 -0.0061 0.0145" rpy="3.14159 2.220446049250313e-16 -1.6248551233397535e-22"/>
     </visual>
@@ -555,7 +555,7 @@
     </collision>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/collision/white_tip.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/collision/white_tip.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -568,7 +568,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/pip_left.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/pip_left.glb"/>
       </geometry>
       <origin xyz="0.0439 0.0068 0.02146" rpy="1.57079 0.0 -6.123233995614214e-17"/>
     </visual>
@@ -587,7 +587,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/thumb_pip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/thumb_pip.glb"/>
       </geometry>
       <origin xyz="0.01196 0.0 -0.0158" rpy="1.57079 0.0 -6.123233995614214e-17"/>
     </visual>
@@ -618,7 +618,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/thumb_dip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/thumb_dip.glb"/>
       </geometry>
       <origin xyz="0.0439 0.0579 -0.0086" rpy="0.0 0.0 0.0"/>
     </visual>
@@ -661,7 +661,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/visual/thumb_fingertip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/visual/thumb_fingertip.glb"/>
       </geometry>
       <origin xyz="0.0625 0.0784 0.0489" rpy="0.0 0.0 0.0"/>
     </visual>
@@ -685,7 +685,7 @@
     </collision>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/leap_hand/meshes/collision/white_tip_thumb.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/leap_hand/meshes/collision/white_tip_thumb.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>

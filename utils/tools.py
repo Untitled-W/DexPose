@@ -472,7 +472,7 @@ def get_object_meshes_from_human_data(seq_data: Dict[str, Any]) -> List[o3d.geom
         
     return obj_meshes
 
-def get_point_clouds_from_human_data(seq_data, ds_num=1000, return_norm=False):
+def get_point_clouds_from_human_data(seq_data, ds_num=1000, return_norm=False, mesh_path=None, if_torch=True):
     """
     从序列数据中加载对象网格并提取下采样后的点云。
 
@@ -488,7 +488,7 @@ def get_point_clouds_from_human_data(seq_data, ds_num=1000, return_norm=False):
                                                      包含点云列表和法向量列表。
     """
     obj_meshes = []
-    for mesh_path in seq_data["object_mesh_path"]:
+    for mesh_path in mesh_path or seq_data["object_mesh_path"]:
         # 读取网格文件
         mesh = o3d.io.read_triangle_mesh(mesh_path)
         # 仅当网格有效时（有顶点）才添加
@@ -513,7 +513,7 @@ def get_point_clouds_from_human_data(seq_data, ds_num=1000, return_norm=False):
         ]
     
     # 使用索引从原始点云中选出下采样后的点
-    pc_ds = [pc[pc_idx] for pc, pc_idx in zip(original_pc, original_pc_ls)]
+    pc_ds = [torch.from_numpy(pc[pc_idx]) if if_torch else pc[pc_idx] for pc, pc_idx in zip(original_pc, original_pc_ls)]
 
     # TACO 数据集的特殊处理：缩放点云
     # 注意：法向量是方向向量，不应被缩放
@@ -523,7 +523,7 @@ def get_point_clouds_from_human_data(seq_data, ds_num=1000, return_norm=False):
 
     if return_norm:
         # 如果需要，也使用相同的索引来采样法向量
-        normals_ds = [normals[pc_idx] for normals, pc_idx in zip(original_normals, original_pc_ls)]
+        normals_ds = [torch.from_numpy(normals[pc_idx]) if if_torch else normals[pc_idx] for normals, pc_idx in zip(original_normals, original_pc_ls)]
         return pc_ds, normals_ds
     else:
         # 默认只返回点云

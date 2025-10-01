@@ -7,8 +7,6 @@ import numpy as np
 import torch
 import copy
 from tqdm import tqdm
-from data_process.mesh_renderer import MeshRenderer3D
-from data_process.vis_utils import visualize_pointclouds_and_mesh, get_multiview_dff, extract_pca, test_pca_matching
 from manotorch.manolayer import ManoLayer
 from utils.vis_utils import vis_pc_coor_plotly
 from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate_feature, get_contact_pts, find_longest_false_substring, from_hand_rot6d, to_hand_rot6d, matrix_to_rotation_6d
@@ -19,7 +17,8 @@ WMQ_IS_USING = True
 
 if WMQ_IS_USING:
 
-    data_root = '/home/qianxu/Desktop/Project/DexPose/data'
+    # data_root = '/home/qianxu/Desktop/Project/DexPose/data'
+    data_root = '/home/wangminqi/workspace/test/data'
 
     ORIGIN_DATA_PATH = {
         "Taco": os.path.join(data_root, "Taco"),
@@ -28,15 +27,15 @@ if WMQ_IS_USING:
     }
 
     HUMAN_SEQ_PATH = {
-        "Taco": os.path.join(data_root, "Taco", "human_save0927"),
-        "Oakinkv2": os.path.join(data_root, "Oakinkv2", "human_save0927"),
-        'DexYCB': os.path.join(data_root, 'DexYCB', 'human_save0927')
+        "Taco": os.path.join(data_root, "Taco", "human_save0929"),
+        "Oakinkv2": os.path.join(data_root, "Oakinkv2", "human_save0929"),
+        'DexYCB': os.path.join(data_root, 'DexYCB', 'human_save0929')
     }
 
     DEX_SEQ_PATH = {
-        "Taco": os.path.join(data_root, "Taco", "dex_save"),
-        "Oakinkv2": os.path.join(data_root, "Oakinkv2", "dex_save"),
-        'DexYCB': os.path.join(data_root, 'DexYCB', 'dex_save')
+        "Taco": os.path.join(data_root, "Taco", "dex_save0929"),
+        "Oakinkv2": os.path.join(data_root, "Oakinkv2", "dex_save0929"),
+        'DexYCB': os.path.join(data_root, 'DexYCB', 'dex_save0929')
     }
 
 else:
@@ -122,7 +121,8 @@ class BaseDatasetProcessor(ABC):
         which_dataset: str,
         task_interval: int = 1,
         seq_data_name: str = "dataset",
-        sequence_indices: Optional[List[int]] = None
+        sequence_indices: Optional[List[int]] = None,
+        feature_on = False,
     ):
         self.root_path = root_path
         self.task_interval = task_interval
@@ -132,29 +132,34 @@ class BaseDatasetProcessor(ABC):
         
         # Setup paths
         self._setup_paths()
+        self.feature_on = feature_on
         
         # Initialize data list
         self.data_ls = self._get_data_list()
         self.sequence_indices = sequence_indices if sequence_indices is not None else list(range(len(self.data_ls)))
-
         self.seq_save_path = f'{save_path}/seq_{seq_data_name}_{task_interval}.p'
-        self.renderer = MeshRenderer3D()
-        self.renderer.load_featurizer(ftype='sd_dinov2')
-        self.manolayer_left = ManoLayer(center_idx=0, side='left', use_pca=False, rot_mode='quat').cuda()
-        self.manolayer_right = ManoLayer(center_idx=0, side='right', use_pca=False, rot_mode='quat').cuda()
+        os.makedirs(save_path, exist_ok=True)
+        if os.path.isfile(self.seq_save_path): os.remove(self.seq_save_path)
 
-        self.texture_prompts = [
-            "a [object] covered in knitted wool texture, studio lighting, high detail",
-            # "a [object] made of smooth polished marble, studio lighting, high detail",
-            # "a [object] coated in cracked dry clay, studio lighting, high detail",
-            # "a [object] wrapped in glossy plastic foil, studio lighting, high detail",
-            # "a [object] textured with brushed metal surface, studio lighting, high detail",
-            # "a [object] covered in colorful mosaic tiles, studio lighting, high detail",
-            # "a [object] made of translucent frosted glass, studio lighting, high detail",
-            # "a [object] covered in moss and natural textures, studio lighting, high detail",
-            # "a [object] wrapped in denim fabric, studio lighting, high detail",
-            # "a [object] coated in shiny glazed ceramic, studio lighting, high detail"
-        ]
+        self.manolayer_left = ManoLayer(center_idx=0, side='left', use_pca=False, rot_mode='quat', mano_assets_root="/home/wangminqi/workspace/test/packages").cuda()
+        self.manolayer_right = ManoLayer(center_idx=0, side='right', use_pca=False, rot_mode='quat', mano_assets_root="/home/wangminqi/workspace/test/packages").cuda()
+
+        if self.feature_on:
+            self.renderer = MeshRenderer3D()
+            self.renderer.load_featurizer(ftype='sd_dinov2')
+
+            self.texture_prompts = [
+                "a [object] covered in knitted wool texture, studio lighting, high detail",
+                # "a [object] made of smooth polished marble, studio lighting, high detail",
+                # "a [object] coated in cracked dry clay, studio lighting, high detail",
+                # "a [object] wrapped in glossy plastic foil, studio lighting, high detail",
+                # "a [object] textured with brushed metal surface, studio lighting, high detail",
+                # "a [object] covered in colorful mosaic tiles, studio lighting, high detail",
+                # "a [object] made of translucent frosted glass, studio lighting, high detail",
+                # "a [object] covered in moss and natural textures, studio lighting, high detail",
+                # "a [object] wrapped in denim fabric, studio lighting, high detail",
+                # "a [object] coated in shiny glazed ceramic, studio lighting, high detail"
+            ]
 
     @staticmethod
     def orientation_to_elev_azim(orientation: np.ndarray) -> tuple:
@@ -199,12 +204,13 @@ class BaseDatasetProcessor(ABC):
 
     @staticmethod
     def mirror_data(data_dict, side):
-        if data_dict[f'{side}o_transf'] is None:
+        if data_dict['o_transf'] is None:
             raise ValueError(f"Object transformation data for side '{side}' is None.")
 
-        if type(data_dict[f'{side}o_transf']) is list:
+        ### object
+        if type(data_dict['o_transf']) is list:
             obj_transf_list_m = []
-            for obj_transf in data_dict[f'{side}o_transf']:
+            for obj_transf in data_dict['o_transf']:
                 transl_m = obj_transf[:, :3, 3].clone()
                 rot_m = obj_transf[:, :3, :3].clone()
 
@@ -219,32 +225,36 @@ class BaseDatasetProcessor(ABC):
                 obj_transf_list_m.append(obj_transf_m)
             
             obj_points_list_m = []
-            for obj_points in data_dict[f'{side}o_points']:
+            for obj_points in data_dict['o_points']:
                 obj_points_m = obj_points.clone()
                 obj_points_m[..., 0] *= -1
                 obj_points_list_m.append(obj_points_m)
             
-            obj_points_ori_list_m = []
-            for obj_points_ori in data_dict[f'{side}o_points_ori']:
-                obj_points_ori_m = obj_points_ori.clone()
-                obj_points_ori_m[..., 0] *= -1
-                obj_points_ori_list_m.append(obj_points_ori_m)
+            # obj_points_ori_list_m = []
+            # for obj_points_ori in data_dict['o_points_ori']:
+            #     obj_points_ori_m = obj_points_ori.clone()
+            #     obj_points_ori_m[..., 0] *= -1
+            #     obj_points_ori_list_m.append(obj_points_ori_m)
             
-            obj_normals_list_m = []
-            for obj_normals in data_dict[f'{side}o_normals']:
-                obj_normals_m = obj_normals.clone()
-                obj_normals_m[..., 0] *= -1
-                obj_normals_list_m.append(obj_normals_m)
+            # obj_normals_list_m = []
+            # for obj_normals in data_dict['o_normals']:
+            #     obj_normals_m = obj_normals.clone()
+            #     obj_normals_m[..., 0] *= -1
+            #     obj_normals_list_m.append(obj_normals_m)
             
-            obj_normals_ori_list_m = []
-            for obj_normals_ori in data_dict[f'{side}o_normals_ori']:
-                obj_normals_ori_m = obj_normals_ori.clone()
-                obj_normals_ori_m[..., 0] *= -1
-                obj_normals_ori_list_m.append(obj_normals_ori_m)
+            # obj_normals_ori_list_m = []
+            # for obj_normals_ori in data_dict['o_normals_ori']:
+            #     obj_normals_ori_m = obj_normals_ori.clone()
+            #     obj_normals_ori_m[..., 0] *= -1
+            #     obj_normals_ori_list_m.append(obj_normals_ori_m)
             
-            obj_features_list_m = [obj_features.clone() for obj_features in data_dict[f'{side}o_features']]
+            if data_dict['o_features'] is not None:
+                obj_features_list_m = [obj_features.clone() for obj_features in data_dict['o_features']]
+            else: 
+                obj_features_list_m = None
+
         else:
-            obj_transf = data_dict[f'{side}o_transf'] # (T, 4, 4)
+            obj_transf = data_dict['o_transf'] # (T, 4, 4)
             transl_m = obj_transf[:, :3, 3].clone()
             rot_m = obj_transf[:, :3, :3].clone()
 
@@ -258,21 +268,35 @@ class BaseDatasetProcessor(ABC):
             obj_transf_m[:, :3, 3] = transl_m
             obj_transf_list_m = obj_transf_m
 
-            obj_points_m = data_dict[f'{side}o_points'].clone()
+            obj_points_m = data_dict['o_points'].clone()
             obj_points_m[..., 0] *= -1
             obj_points_list_m = obj_points_m
 
-            if data_dict[f'{side}o_normals'] is None:
-                obj_normals_list_m = None
-            else:
-                obj_normals_m = data_dict[f'{side}o_normals'].clone()
-                obj_normals_m[..., 0] *= -1
-                obj_normals_list_m = obj_normals_m
+            # if data_dict['o_normals'] is None:
+            #     obj_normals_list_m = None
+            # else:
+            #     obj_normals_m = data_dict['o_normals'].clone()
+            #     obj_normals_m[..., 0] *= -1
+            #     obj_normals_list_m = obj_normals_m
 
         ### hand
-        hand_joints_m = data_dict[f'{side}h_joints'].clone()
+        hand_joints_m = data_dict['h_joints'].clone()
         hand_joints_m[..., 0] *= -1
-        hand_params:torch.Tensor = data_dict[f'{side}h_params'].clone()
+        hand_tsl_m = data_dict['h_tsl'].clone()
+        hand_tsl_m[..., 0] *= -1
+
+        hand_coeffs_m = data_dict['h_coeffs'].clone()
+        R = quaternion_to_matrix(hand_coeffs_m[...,0,:])
+        reflection_matrix = torch.tensor([
+            [-1, 0, 0],
+            [0, 1, 0],
+            [0, 0, 1]
+        ], dtype=torch.float32)
+        R_symmetric = torch.matmul(reflection_matrix, R)
+        q_symmetric = matrix_to_quaternion(R_symmetric)
+        hand_coeffs_m[...,0,:] = q_symmetric
+
+        hand_params:torch.Tensor = data_dict['h_params'].clone()
         hand_params[..., -3] *= -1
         hand_rotvec = from_hand_rot6d(hand_params[:, :-3].reshape(hand_params.shape[0], -1, 6), to_rotvec=True)
         hand_rotvec = hand_rotvec.reshape(hand_params.shape[0], -1, 3)
@@ -283,26 +307,29 @@ class BaseDatasetProcessor(ABC):
         side_m = 'l' if side == 'r' else 'r'
 
         data_dict_m = {
-            f'{side_m}h_joints': hand_joints_m,
-            f'{side_m}o_transf': obj_transf_list_m,
-            f'{side_m}o_points': obj_points_list_m,
-            f'{side_m}o_normals': obj_normals_list_m,
-            f'{side_m}h_params': hand_params_m,
-            f'{side}h_joints': None,
-            f'{side}o_transf': None,
-            f'{side}o_points': None,
-            f'{side}o_normals': None,
-            f'{side}h_params': None,
-            'contact_indices': copy.deepcopy(data_dict['contact_indices']),
+            'side': side_m,
+            'if_flip': True,
+
+            'h_joints': hand_joints_m,
+            'h_tsl': hand_tsl_m,
+            'h_coeffs': hand_coeffs_m,
+            'h_params': hand_params_m,
+
+            'o_transf': torch.stack(obj_transf_list_m),
+            'o_points': obj_points_list_m,
+            'o_features': obj_features_list_m,
             
-            'mesh_path': copy.deepcopy(data_dict['mesh_path']),
-            'side': 1 if side_m == 'r' else 0, 
-            'task_desc': copy.deepcopy(data_dict['task_desc']),
+            'contact_indices': copy.deepcopy(data_dict['contact_indices']),
+            'object_mesh_path': copy.deepcopy(data_dict['object_mesh_path']),
+            'object_names': copy.deepcopy(data_dict['object_names']),
+
             'seq_len': data_dict['seq_len'],
-            'which_dataset': data_dict['which_dataset'],
-            'which_sequence': data_dict['which_sequence'],
+            'task_desc': copy.deepcopy(data_dict['task_desc']),
+            'which_dataset': copy.deepcopy(data_dict['which_dataset']),
+            'which_sequence': copy.deepcopy(data_dict['which_sequence']),
             'uid': data_dict['uid'],
         }
+
         return data_dict_m
 
     @staticmethod
@@ -402,94 +429,100 @@ class BaseDatasetProcessor(ABC):
         # Load object data
         obj_transf_ls, object_name_ls, object_mesh_path_ls = self._get_object_info(raw_data, frame_indices)
         if obj_transf_ls is None: return None
+        from utils.tools import get_point_clouds_from_human_data, apply_transformation_human_data, get_object_meshes_from_human_data, apply_transformation_on_object_mesh
+        pc, pc_norm = get_point_clouds_from_human_data(raw_data, return_norm=True, ds_num=1000, mesh_path=object_mesh_path_ls, if_torch=True)
 
-        ### render & feature & contact points
-        object_points_ls = []
-        object_features_ls = []
-        contact_indices_ls = []
-        start_idx, end_idx = 1e10, 0
-        
-        ### get camera orientation
-        render_at_tidx = 0
-        obj_inv_transf = torch.inverse(obj_transf_ls[0]).to(hand_joints.device)
-        hand_inv_joints = hand_joints @ obj_inv_transf[:, :3, :3].transpose(1, 2) + obj_inv_transf[:, :3, 3].unsqueeze(1)
-        orientation = hand_inv_joints[render_at_tidx, 0].cpu().numpy()
-        orientation[2] += 0.15
-        ### get camera orientation
-        
-        for obj_part_idx, object_mesh_path in enumerate(object_mesh_path_ls):
-            verts = self.renderer.load_mesh(object_mesh_path, scale=0.01)
-            elev, azim = self.orientation_to_elev_azim(orientation)
-            camera_params = [
-                {'elev': elev, 'azim':  azim, 'fov': 60},     # hand orientation
-            ]
-            R_w2v, T_w2v = self.renderer.setup_cameras(camera_params, auto_distance=True)
-            self.renderer.render_views(image_size=256, lighting_type='ambient')
-            object_name = raw_data['obj_real_name']
-            augmented_prompts = [p.replace("[object]", object_name) for p in self.texture_prompts]
-            self.renderer.augment_textures(augmented_prompts, save_dir="test_res")
-            self.renderer.extract_features(prompt=f"a {object_name}", w_aug_texture=True)
-            rgbs, depths, masks, points_ls, features = self.renderer.get_rendered_data() # features: (num_views, num_texture, feature_dim, height, width)
-            all_points_dff, all_features_dff = get_multiview_dff(points_ls, masks, features,
-                                                n_points=1000) 
+        start_idx, end_idx = 0, len(frame_indices)
+        if self.feature_on:
+            from data_process.mesh_renderer import MeshRenderer3D
+            from data_process.vis_utils import visualize_pointclouds_and_mesh, get_multiview_dff, extract_pca, test_pca_matching
+
+            ### render & feature & contact points
+            object_points_ls = []
+            object_features_ls = []
+            contact_indices_ls = []
+            start_idx, end_idx = 1e10, 0
             
-            ### get contact point indices
-            obj_points_trans_ori = apply_transformation_pt(all_points_dff, obj_transf_ls[obj_part_idx])
-            hand_key_joints = get_key_hand_joints(hand_joints)
-            hand_key_features = intepolate_feature(hand_key_joints, all_features_dff[0], obj_points_trans_ori)
-            distance = torch.norm(hand_key_joints[..., None, :] - obj_points_trans_ori[..., None, :, :], dim=-1, p=2)
-            min_dis, min_dis_idx = torch.min(distance, dim=-1)
-            untouch_mask = torch.min(min_dis, dim=-1)[0] > 0.02
-            start_idx_, end_idx_ = find_longest_false_substring(untouch_mask)
-            start_idx = min(start_idx, start_idx_)
-            end_idx = max(end_idx, end_idx_)
-            if start_idx == -1:
-                logging.warning(f"Sequence {raw_data['which_sequence']} on side {side} has no contact points. Skipping.")
-                return None
-            if end_idx - start_idx <= 30:
-                logging.warning(f"Sequence {raw_data['which_sequence']} on side {side} has too few frames: {end_idx - start_idx}. Skipping.")
-                return None
-            contact_indices = get_contact_pts(all_points_dff, all_features_dff[0], hand_key_features[start_idx:end_idx], n_pts=100 // len(object_mesh_path_ls))
-            ### get contact point indices
+            ### get camera orientation
+            render_at_tidx = 0
+            obj_inv_transf = torch.inverse(obj_transf_ls[0]).to(hand_joints.device)
+            hand_inv_joints = hand_joints @ obj_inv_transf[:, :3, :3].transpose(1, 2) + obj_inv_transf[:, :3, 3].unsqueeze(1)
+            orientation = hand_inv_joints[render_at_tidx, 0].cpu().numpy()
+            orientation[2] += 0.15
+            ### get camera orientation
+            
+            for obj_part_idx, object_mesh_path in enumerate(object_mesh_path_ls):
+                verts = self.renderer.load_mesh(object_mesh_path, scale=0.01)
+                elev, azim = self.orientation_to_elev_azim(orientation)
+                camera_params = [
+                    {'elev': elev, 'azim':  azim, 'fov': 60},     # hand orientation
+                ]
+                R_w2v, T_w2v = self.renderer.setup_cameras(camera_params, auto_distance=True)
+                self.renderer.render_views(image_size=256, lighting_type='ambient')
+                object_name = raw_data['obj_real_name']
+                augmented_prompts = [p.replace("[object]", object_name) for p in self.texture_prompts]
+                self.renderer.augment_textures(augmented_prompts, save_dir="test_res")
+                self.renderer.extract_features(prompt=f"a {object_name}", w_aug_texture=True)
+                rgbs, depths, masks, points_ls, features = self.renderer.get_rendered_data() # features: (num_views, num_texture, feature_dim, height, width)
+                all_points_dff, all_features_dff = get_multiview_dff(points_ls, masks, features,
+                                                    n_points=1000) 
+                
+                ### get contact point indices
+                obj_points_trans_ori = apply_transformation_pt(all_points_dff, obj_transf_ls[obj_part_idx])
+                hand_key_joints = get_key_hand_joints(hand_joints)
+                hand_key_features = intepolate_feature(hand_key_joints, all_features_dff[0], obj_points_trans_ori)
+                distance = torch.norm(hand_key_joints[..., None, :] - obj_points_trans_ori[..., None, :, :], dim=-1, p=2)
+                min_dis, min_dis_idx = torch.min(distance, dim=-1)
+                untouch_mask = torch.min(min_dis, dim=-1)[0] > 0.02
+                start_idx_, end_idx_ = find_longest_false_substring(untouch_mask)
+                start_idx = min(start_idx, start_idx_)
+                end_idx = max(end_idx, end_idx_)
+                if start_idx == -1:
+                    logging.warning(f"Sequence {raw_data['which_sequence']} on side {side} has no contact points. Skipping.")
+                    return None
+                if end_idx - start_idx <= 30:
+                    logging.warning(f"Sequence {raw_data['which_sequence']} on side {side} has too few frames: {end_idx - start_idx}. Skipping.")
+                    return None
+                contact_indices = get_contact_pts(all_points_dff, all_features_dff[0], hand_key_features[start_idx:end_idx], n_pts=100 // len(object_mesh_path_ls))
+                ### get contact point indices
 
-            object_points_ls.append(all_points_dff)
-            object_features_ls.append(all_features_dff)
-            contact_indices_ls.append(contact_indices)
-        contact_indices = torch.cat(contact_indices_ls, dim=-1)
-        ### render & feature & contact points
-        
-        if save_fature:
-            feature_store_path = os.path.join(os.path.dirname(self.seq_save_path), 'feature')
-            if not os.path.exists(feature_store_path):
-                os.makedirs(feature_store_path)
-            torch.save(object_features_ls[0].cpu(), os.path.join(feature_store_path, f'{uid}.pth'))
+                object_points_ls.append(all_points_dff)
+                object_features_ls.append(all_features_dff)
+                contact_indices_ls.append(contact_indices)
+            contact_indices = torch.cat(contact_indices_ls, dim=-1)
+            ### render & feature & contact points
+            
+            if save_fature:
+                feature_store_path = os.path.join(os.path.dirname(self.seq_save_path), 'feature')
+                if not os.path.exists(feature_store_path):
+                    os.makedirs(feature_store_path)
+                torch.save(object_features_ls[0].cpu(), os.path.join(feature_store_path, f'{uid}.pth'))
+            assert end_idx - start_idx == contact_indices.shape[0], \
+                f"Mismatch in sequence length: {end_idx - start_idx} vs {contact_indices.shape[0]}"
 
         ### Return KEYS
         r_side = 'l' if side == 'r' else 'r'
         hand_thetas_rot6d = matrix_to_rotation_6d(quaternion_to_matrix(hand_coeffs))
-        assert end_idx - start_idx == contact_indices.shape[0], \
-            f"Mismatch in sequence length: {end_idx - start_idx} vs {contact_indices.shape[0]}"
-        
+
         sequence_data = {
-            f'{side}h_joints': hand_joints.cpu()[start_idx:end_idx], # (T, 21, 3)
-            f'{side}o_transf': obj_transf_ls[0][start_idx:end_idx].cpu(), # [(T, 4, 4), ...]
-            f'{side}o_points': object_points_ls[0].cpu(), # [(N_points, 3), ...]
-            # f'{side}o_features': object_features_ls[0].cpu(), # [(N_textures, N_points, d), ...]
-            f'{side}h_params': torch.cat([hand_thetas_rot6d.flatten(-2, -1), hand_tsl], dim=-1).cpu()[start_idx:end_idx], # (T, 99)
-            f'{side}o_normals': None,  # Placeholder for normals if not available
-
-            f'{r_side}h_joints': None,
-            f'{r_side}o_transf': None,
-            f'{r_side}o_points': None,
-            # f'{r_side}o_features': None,
-            f'{r_side}h_params': None,
-            f'{r_side}o_normals': None,  # Placeholder for normals if not available
-
-            'contact_indices': contact_indices.cpu(),
-            'object_mesh_path': object_mesh_path_ls,
             'side': side, # 1 if side == 'r' else 0,  # 1 for right, 0 for left
-            'task_desc': self._get_task_description(raw_data),
+            'if_flip': False,
+
+            'h_joints': hand_joints.cpu()[start_idx:end_idx], # (T, 21, 3)
+            'h_tsl': hand_tsl.cpu()[start_idx:end_idx], # (T, 3)
+            'h_coeffs': hand_coeffs.cpu()[start_idx:end_idx], # (T, 16, 4)
+            'h_params': torch.cat([hand_thetas_rot6d.flatten(-2, -1), hand_tsl], dim=-1).cpu()[start_idx:end_idx], # (T, 99)
+
+            'o_transf': torch.stack([oo[start_idx:end_idx].cpu() for oo in obj_transf_ls]), # (k, T, 4, 4)
+            'o_points': [oo.cpu() for oo in object_points_ls] if self.feature_on else pc, # a list [(N_points, 3), ...]
+            'o_features': [oo.cpu() for oo in object_features_ls] if self.feature_on else None, # a list [(N_textures, N_points, d), ...]
+
+            'contact_indices': contact_indices.cpu() if self.feature_on else None,
+            'object_mesh_path': object_mesh_path_ls,
+            'object_names':object_name_ls,
+
             'seq_len': hand_joints.shape[0],
+            'task_desc': self._get_task_description(raw_data),
             'which_dataset': raw_data['which_dataset'],
             'which_sequence': raw_data['which_sequence'],
             'uid': uid,
@@ -573,7 +606,7 @@ class BaseDatasetProcessor(ABC):
         """Main processing pipeline."""
         logging.info(f"Starting {self.__class__.__name__} processing...")
         data_list = self.process_all_sequences(self.sequence_indices)
-        self.save_processed_data(data_list)
+        # self.save_processed_data(data_list)
         return data_list
     
 

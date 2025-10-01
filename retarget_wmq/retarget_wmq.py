@@ -1,7 +1,6 @@
 import torch
 import numpy as np
 from matplotlib import pyplot as plt
-            
 
 from .robot_wrapper import load_robot, HandRobotWrapper
 # from utils.hand_model import load_robot
@@ -108,12 +107,15 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
 
     device = robot_hand.device
 
+    side = seq_data['side']
+    seq_data['o_transf'] = seq_data['o_transf'].unsqueeze(0)
+
     # Init robot hand transformation
-    init_hand_tsl, init_hand_quat = seq_data['hand_joints'][:, 0], seq_data['hand_coeffs'][:, 0]
+    init_hand_tsl, init_hand_quat = seq_data['h_joints'][:, 0], seq_data['h_coeffs'][:, 0]
     # This is based on the design that
     # (1) the first 6 DoF are dummy joints for world coordinate; 
     # (2) they have the same representation convention;
-    dex_pose = torch.zeros((seq_data['hand_joints'].shape[0], robot_hand.n_dofs), device=device)  # T x d
+    dex_pose = torch.zeros((seq_data['h_joints'].shape[0], robot_hand.n_dofs), device=device)  # T x d
 
     # Turn quat into axis-angle, this should use this certain code because different transformation varies.
     init_hand_aa = quat_to_aa_wmq(init_hand_quat)
@@ -133,7 +135,7 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
         
         # ### Test finger keypoints ###
         # robot_hand.compute_forward_kinematics(dex_pose)
-        # mano_fingertip = seq_data["hand_joints"][:, [5, 8, 9, 12, 13, 16, 17, 20, 4]].to(device)
+        # mano_fingertip = seq_data['h_joints'][:, [5, 8, 9, 12, 13, 16, 17, 20, 4]].to(device)
         # fingertip_keypoints = robot_hand.get_tip_points()
         # vis_frames_plotly(
         #             # pc_ls=[np.tile(kwargs['point_cloud'], (T, 1, 1))], 
@@ -231,7 +233,7 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
         # total_step = 150
         # lr = 0.05
         # init_optimizer = torch.optim.Adam([dex_pose], lr=lr, weight_decay=0)
-        # mano_fingertip = seq_data["hand_joints"][:, [5, 8, 9, 12, 13, 16, 17, 20, 4]].to(device)
+        # mano_fingertip = seq_data['h_joints'][:, [5, 8, 9, 12, 13, 16, 17, 20, 4]].to(device)
         # for ii in tqdm(range(total_step), desc="Initial alignment"):
         #     robot_hand.compute_forward_kinematics(dex_pose[check_frame])
         #     fingertip_keypoints = robot_hand.get_tip_points()
@@ -267,7 +269,7 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
         #     # losses[lr] = []
         # init_optimizer = torch.optim.Adam([dex_pose], lr=lr, weight_decay=0)
         # # TODO Fix later. This should return corresponding hand keypoints for different hands.
-        # mano_fingertip = seq_data["hand_joints"].to(device)#[check_frame]
+        # mano_fingertip = seq_data['h_joints'].to(device)#[check_frame]
         # for ii in tqdm(range(total_step), desc="Initial alignment"):
         #     robot_hand.compute_forward_kinematics(dex_pose)#[check_frame])
         #     fingertip_keypoints = robot_hand.get_all_joints_in_mano_order()
@@ -294,7 +296,7 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
         "losses": {"E_align":[], f"E_spen x{sp_coeffs}":[]}
     }
     init_optimizer = torch.optim.Adam([dex_pose], lr=lr, weight_decay=0)
-    mano_fingertip = seq_data["hand_joints"].to(device)
+    mano_fingertip = seq_data['h_joints'].to(device)
     for ii in tqdm(range(total_step), desc="Initial alignment"):
         robot_hand.compute_forward_kinematics(dex_pose)
         fingertip_keypoints = robot_hand.get_all_joints_in_mano_order()
@@ -310,11 +312,11 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
         logger_1['losses']['E_align'].append(E_align.item())
         logger_1['losses'][f"E_spen x{sp_coeffs}"].append(E_spen.item())
 
-    filename = f"retarget_wmq/0912vis/(4)0926/stage1_spen{sp_coeffs}_step{total_step}_lr{lr}_{seq_data['which_sequence']}_frame{logger_1['check_frame']}"
+    filename = f"retarget_wmq/0929vis/stage1_spen{sp_coeffs}_step{total_step}_lr{lr}_{seq_data['which_sequence']}_frame{logger_1['check_frame']}"
     if logger_1['is_vis']:
         from utils.wmq import vis_frames_plotly
         vis_frames_plotly(
-                gt_hand_joints=seq_data['hand_joints'][logger_1['check_frame']].expand(total_step, -1, -1).cpu().numpy(),
+                gt_hand_joints=seq_data['h_joints'][logger_1['check_frame']].expand(total_step, -1, -1).cpu().numpy(),
                 gt_posi_pts=mano_fingertip[logger_1['check_frame']].expand(total_step, -1, -1).cpu().numpy(),
                 posi_pts_ls=[np.stack(logger_1['history']['robot_keypoints'])],
                 hand_mesh_ls=[[i for i in logger_1["history"]["hand_mesh"]]],
@@ -343,24 +345,20 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
     pen_coeffs = 0.005
     pen_thres = 0.005
     logger_2 = {
-        "is_plot": True,
-        "is_vis": True,
+        "is_plot": False,
+        "is_vis": False,
         "check_frame": 90,
         "history": {"hand_mesh":[], "robot_keypoints":[], "ct_pts":[], "corr_ct_pts":[],"spen":[], "inner_pts":[], "outer_pts":[]},
         "losses": {"E_align":[], f"E_spen x{sp_coeffs}":[], f"E_dist x{dis_coeffs}":[], f"E_pen x{pen_coeffs}":[]}
     }
     check_frame = logger_2['check_frame']
     next_optimizer = torch.optim.Adam([dex_pose], lr=lr, weight_decay=0)
-    # mano_fingertip = seq_data["hand_joints"].to(device)[:, [5, 8, 9, 12, 13, 16, 17, 20, 4]]
-    mano_fingertip = seq_data["hand_joints"].to(device)
+    mano_fingertip = seq_data['h_joints'].to(device)
     from utils.tools import get_point_clouds_from_human_data, apply_transformation_human_data, get_object_meshes_from_human_data, apply_transformation_on_object_mesh
     pc, pc_norm = get_point_clouds_from_human_data(seq_data, return_norm=True, ds_num=1000)
-    pc_ls, pc_norm_ls = apply_transformation_human_data(pc, seq_data["obj_poses"], norm=pc_norm)
-    obj_mesh = get_object_meshes_from_human_data(seq_data)
-    obj_mesh_ls = apply_transformation_on_object_mesh(obj_mesh, seq_data["obj_poses"][:, check_frame:check_frame+1, :, :])
+    pc_ls, pc_norm_ls = apply_transformation_human_data(pc, seq_data['o_transf'], norm=pc_norm)
 
     if True:
-
 
         # ### Debug SDF, visual mesh is wrong, approximate is right ###
         # import plotly.graph_objects as go
@@ -564,7 +562,7 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
 
         # # --- Create and Save Figure ---
         # fig = go.Figure(data=init_frame.data, layout=layout, frames=frames)
-        # fig.write_html(f"retarget_wmq/0912vis/(4)0926/test_sdf_{mode}.html")
+        # fig.write_html(f"retarget_wmq/0929vis/(4)0926/test_sdf_{mode}.html")
         # import sys;sys.exit()
         # ### Debug SDF, visual mesh is wrong, approximate is right ###
 
@@ -595,13 +593,15 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
         logger_2["losses"][f"E_dist x{dis_coeffs}"].append(E_dis.item())
         logger_2["losses"][f"E_pen x{pen_coeffs}"].append(E_pen.item())
 
-    filename = f"retarget_wmq/0912vis/(4)0926/stage2_step{total_step}_all_lr{lr}_thres{thres}_spcoeffs{sp_coeffs}_pen{pen_coeffs}_{pen_thres}_dis{dis_coeffs}square_disthres{dis_thres}_{seq_data['which_sequence']}_frame{check_frame}"
+    filename = f"retarget_wmq/0929vis/stage2_step{total_step}_all_lr{lr}_thres{thres}_spcoeffs{sp_coeffs}_pen{pen_coeffs}_{pen_thres}_dis{dis_coeffs}square_disthres{dis_thres}_{seq_data['which_sequence']}_frame{check_frame}"
     if logger_2["is_vis"]:
         from utils.wmq import vis_dexhand_optimize
+        obj_mesh = get_object_meshes_from_human_data(seq_data)
+        obj_mesh_ls = apply_transformation_on_object_mesh(obj_mesh, seq_data['o_transf'][:, check_frame:check_frame+1, :, :])
         vis_dexhand_optimize(
             pc_ls=[np.tile(pc_ls[check_frame], (total_step, 1, 1))],
             object_mesh_ls=[i*total_step for i in obj_mesh_ls],
-            gt_hand_joints=seq_data['hand_joints'][check_frame].expand(total_step, -1, -1).cpu().numpy(),
+            gt_hand_joints=seq_data['h_joints'][check_frame].expand(total_step, -1, -1).cpu().numpy(),
             hand_mesh_ls=[[i for i in logger_2["history"]["hand_mesh"]]],
             gt_posi_pts=mano_fingertip[check_frame].expand(total_step, -1, -1).cpu().numpy(),
             posi_pts_ls=np.stack(logger_2["history"]["robot_keypoints"]),
@@ -633,25 +633,7 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
     retargeted_seq = dict(            
         which_hand=robot_hand.robot_name,
         hand_poses=dex_pose,
-        side=seq_data["side"],
-
-        hand_tsls=seq_data["hand_tsls"],
-        hand_coeffs=seq_data["hand_coeffs"],
-        hand_joints=seq_data["hand_joints"],
-
-        obj_poses=seq_data["obj_poses"],
-        obj_point_clouds=seq_data["obj_point_clouds"] if "obj_point_clouds" in seq_data else pc_ls,
-        obj_norms=seq_data["obj_norms"] if "obj_norms" in seq_data else pc_norm_ls,
-        obj_feature=seq_data["obj_feature"] if "obj_feature" in seq_data else None,
-        object_names=seq_data["object_names"],
-        object_mesh_path=seq_data["object_mesh_path"],
-
-        frame_indices=seq_data["frame_indices"],
-        task_description=seq_data["task_description"],
-        which_dataset=seq_data["which_dataset"],
-        which_sequence=seq_data["which_sequence"],
-        extra_info=seq_data["extra_info"]
-        )
+        ) + seq_data
 
     return retargeted_seq, logger_1['losses'], logger_2['losses']
 
@@ -670,7 +652,8 @@ def main_retarget(seq_data_ls, robots):
             losses_1_all.append(losses_1)
             losses_2_all.append(losses_2)
         processed_data[robot_hand] = retargeted_data
-        if True:
+
+        if False:
             # draw losses
             avg_losses_1 = {}
             avg_losses_2 = {}
@@ -682,12 +665,12 @@ def main_retarget(seq_data_ls, robots):
             visualize_time_series_with_fill_between(
                 avg_losses_1, 
                 title=f"Stage 1 Losses for {robot_name}", 
-                filename=f"retarget_wmq/0912vis/(4)0926/all_seq_stage1_losses_{robot_name}"
+                filename=f"retarget_wmq/0929vis/all_seq_stage1_losses_{robot_name}"
             )
             visualize_time_series_with_fill_between(
                 avg_losses_2, 
                 title=f"Stage 2 Losses for {robot_name}", 
-                filename=f"retarget_wmq/0912vis/(4)0926/all_seq_stage2_losses_{robot_name}"
+                filename=f"retarget_wmq/0929vis/all_seq_stage2_losses_{robot_name}"
             )
 
     return processed_data
@@ -700,6 +683,8 @@ if __name__ == "__main__":
     from tqdm import tqdm
 
     robots = ['shadow_hand']
-    file_path = "/home/qianxu/Desktop/Project/DexPose/data_dict_wqx_1.pth"
-    seq_data_ls = torch.load(file_path)[326:330]
+    file_path = '/home/wangminqi/workspace/test/data/Taco/human_save0929/seq_feature_1.p'
+    import pickle
+    with open(file_path, 'rb') as f:
+        seq_data_ls = pickle.load(f)[8:9]
     processed_data = main_retarget(seq_data_ls, robots)

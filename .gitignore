@@ -6,7 +6,7 @@ wandb
 tmp
 
 0912_ignore
-0912vis
+0929vis
 *.zip
 *.pth
 

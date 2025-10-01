@@ -203,11 +203,11 @@ class HandModelURDF:
 
 def load_robot(robot_name_str: str, side='right'):
 
-    hand_asset_root = os.path.join("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands", robot_name_str)
+    hand_asset_root = os.path.join("/home/wangminqi/workspace/test/packages/hands", robot_name_str)
     
     robot = HandModelURDF(robot_name_str,
                         #   f'/home/qianxu/Desktop/Project/DexPose/retarget/urdf/{robot_name_str}_{side}_glb.urdf',
-                        #   f'/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/{robot_name_str}/meshes',
+                        #   f'/home/wangminqi/workspace/test/packages/hands/{robot_name_str}/meshes',
                         os.path.join(hand_asset_root, f'new_{side}_glb.urdf'),
                         os.path.join(hand_asset_root, f'meshes'),
                         )

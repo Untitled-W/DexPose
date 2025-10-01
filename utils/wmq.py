@@ -132,6 +132,7 @@ def pt_transform(points, transformation):
     transformed_points = (transformation @ points_homogeneous.T).T
     return transformed_points[:, :3]
 
+
 def norm_transform(normals: np.ndarray, transformation: np.ndarray) -> np.ndarray:
     """
     对一组3D法向量（或任何方向向量）应用一个4x4变换矩阵的旋转部分。
@@ -219,6 +220,7 @@ def apply_transformation_human_data(
     else:
         return np.asarray(pc_ls)
 
+
 def apply_transformation_on_object_mesh(
     meshes: List[o3d.geometry.TriangleMesh],
     transformation: torch.Tensor
@@ -278,6 +280,7 @@ def apply_transformation_on_object_mesh(
             transformed_meshes_per_object[i].append(transformed_mesh)
 
     return transformed_meshes_per_object
+
 
 def extract_hand_points_and_mesh(hand_tsls, hand_coeffs, side):
     from manotorch.manolayer import ManoLayer
@@ -419,7 +422,6 @@ def get_vis_hand_keypoints_with_color_gradient_and_lines(gt_posi_pts: np.ndarray
     return data
 
 
-
 def visualize_hand_and_joints(
     mano_joint: np.array = None, 
     robot_keypoints: Dict[str, torch.Tensor] = None,
@@ -498,7 +500,6 @@ def visualize_hand_and_joints(
         print(f"Visualization saved to {filename}.html")
     else:
         fig.show()
-
 
 
 def vis_frames_plotly(
@@ -1155,7 +1156,6 @@ def visualize_dex_hand_sequence_together(seq_data_ls, name_list, filename: Optio
         gt_hand_joints=mano_hand_joints,
         filename=filename
     )
-
 
 
 def _vis_dexhand_optimize_frame(

@@ -24,7 +24,8 @@ def tokens_to_output(output_type, dense_tokens, cls_token, feat_hw):
 
 class DINOv2Featurizer:
     def __init__(self, dino_id='dinov2_vitb14'):
-        self.model = torch.hub.load('facebookresearch/dinov2', dino_id).eval().cuda()
+        # self.model = torch.hub.load('facebookresearch/dinov2', dino_id).eval().cuda()
+        self.model = torch.hub.load('/home/wangminqi/.cache/torch/hub/facebookresearch_dinov2_main/', dino_id, trust_repo=True, source='local').eval().cuda()
 
     @torch.no_grad()
     def forward(self, img_tensor, block_index, prompt=None, ensemble_size=None):

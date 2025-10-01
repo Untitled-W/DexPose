@@ -42,7 +42,7 @@ def run_visualization_grid(all_dex_data):
 
     # --- 1. 资产加载 ---
     first_data = all_dex_data[0]
-    hand_asset_root = os.path.join("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands", first_data['which_hand'])
+    hand_asset_root = os.path.join("/home/wangminqi/workspace/test/packages/hands", first_data['which_hand'])
     side = 'left' if first_data['side'] == 0 else 'right'
     hand_asset_file = f"new_{side}_glb.urdf"
 

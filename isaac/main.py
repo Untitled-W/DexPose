@@ -75,7 +75,7 @@ def create_env(dex_seq_data: dict):
     lower = gymapi.Vec3(-spacing, -spacing, 0.0)
     upper = gymapi.Vec3(spacing, spacing, spacing)
 
-    hand_asset_root = os.path.join("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands", dex_seq_data['which_hand'])
+    hand_asset_root = os.path.join("/home/wangminqi/workspace/test/packages/hands", dex_seq_data['which_hand'])
     side = 'left' if dex_seq_data['which_hand'] == 0 else 'right'
     hand_asset_file = os.path.join(f"new_{side}_glb.urdf")
 
@@ -206,7 +206,7 @@ if __name__ == "__main__":
     K, T = obj_poses.shape[:2]
 
     side = 'left' if dex_seq_data['side'] == 0 else 'right'
-    hand_asset_root = os.path.join("/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands", dex_seq_data['which_hand'])
+    hand_asset_root = os.path.join("/home/wangminqi/workspace/test/packages/hands", dex_seq_data['which_hand'])
     robot = HandModelURDF(dex_seq_data['which_hand'],os.path.join(hand_asset_root, f"new_{side}_glb.urdf"),os.path.join(hand_asset_root, f'meshes'))
 
     ### Create a mapping from PK to Isaac

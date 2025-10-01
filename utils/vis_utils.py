@@ -872,20 +872,20 @@ def vis_pc_coor_plotly(
 
 
 
-def visualize_human_sequence(seq_data, filename: Optional[str] = None):
+def visualize_human_sequence(seq_data, filename: Optional[str] = None, use_pc=False, use_hand=False):
     
     ##  Visualize Object Point Clouds ##
-    if 'side' in seq_data:
-        pc = seq_data[f"{seq_data['side']}o_points"] # (1000, 3)
-        transf = seq_data[f"{seq_data['side']}o_transf"] # (123, 4, 4)        \
-        pc_ls = apply_transformation_human_data([pc], transf.unsqueeze(0))
+    if use_pc:
+        pc = seq_data["o_points"] # a list of [(1000, 3)]
+        transf = seq_data["o_transf"] # (k, 123, 4, 4)
+        pc_ls = apply_transformation_human_data(pc, transf)
     else:
         pc = get_point_clouds_from_human_data(seq_data)
         pc_ls = apply_transformation_human_data(pc, seq_data["obj_poses"])
 
     ## Extract Hand Points and Mesh ##
-    if 'side' in seq_data:
-        mano_hand_joints = seq_data[f"{seq_data['side']}h_joints"]
+    if use_hand:
+        mano_hand_joints = seq_data["h_joints"]
     else:
         mano_hand_joints, hand_verts = extract_hand_points_and_mesh(seq_data["hand_tsls"], seq_data["hand_coeffs"], seq_data["side"])
 
@@ -898,28 +898,114 @@ def visualize_human_sequence(seq_data, filename: Optional[str] = None):
     )
 
 
-def visualize_human_sequence2(seq_data, filename: Optional[str] = None):
-    
-    ##  Visualize Object Point Clouds ##
-    pc = get_point_clouds_from_human_data(seq_data)
-    # pc = seq_data['object_points_ls']
-    poses = seq_data["obj_poses"] @ seq_data['mesh_norm_trans']
+def visualize_human_sequence_mid_frame(seq_data, filename: Optional[str] = "mid_frame_vis.png", use_pc=False, use_hand=False):
+    """
+    Visualizes the middle frame of a human sequence and saves it as a PNG file with a z-down camera view.
 
-    pc_ls = apply_transformation_human_data(pc, poses)
+    Args:
+        seq_data (dict): Dictionary containing sequence data similar to the input of visualize_human_sequence.
+        filename (Optional[str]): The name of the output PNG file. Defaults to "mid_frame_vis.png".
+                                  Ensure 'kaleido' is installed for PNG export (pip install kaleido).
+        use_pc (bool): Whether to use object point clouds from 'o_points' and 'o_transf'.
+        use_hand (bool): Whether to use hand joints from 'sideh_joints' directly.
+    """
 
-    ## Extract Hand Points and Mesh ##
-    mano_hand_joints, hand_verts = extract_hand_points_and_mesh(seq_data["hand_tsls"], seq_data["hand_coeffs"], seq_data["side"])
-    # mano_hand_joints = seq_data['hand_joints']
-    print("Hi")
+    T = None
+    if use_pc:
+        if "o_transf" in seq_data:
+            T = seq_data["o_transf"].shape[1]
+    else:
+        if "obj_poses" in seq_data:
+            if isinstance(seq_data["obj_poses"], np.ndarray):
+                T = seq_data["obj_poses"].shape[1]
+            elif isinstance(seq_data["obj_poses"], list):
+                T = len(seq_data["obj_poses"][0])
 
-    # Visualize using vis_frames_plotly
-    vis_frames_plotly(
-        pc_ls=[pc_ls], # should be a list, len 1, (T, N, 3)
-        gt_hand_joints=mano_hand_joints, # should be a tensor, (T, 21, 3)
+    # Fallback to hand joints/parameters if T is not yet determined
+    if T is None:
+        side_joints_key = "h_joints"
+        if side_joints_key in seq_data:
+            T = seq_data[side_joints_key].shape[0]
+        elif "hand_tsls" in seq_data:
+            T = seq_data["hand_tsls"].shape[0]
+
+    if T is None or T == 0:
+        print("Error: Could not determine the number of frames (T) from input data. Aborting visualization.")
+        return
+
+    mid_frame_idx = T // 2
+
+    # Prepare data for the mid-frame, similar to how visualize_human_sequence prepares full sequence data,
+    # then extracting the mid_frame_idx.
+
+    # 1. Object Point Clouds
+    all_transformed_pcs_full_seq = None
+    if use_pc:
+        pc_static = seq_data["o_points"] # a list [(N, 3), ...]
+        transf_full = seq_data["o_transf"] # (k, T, 4, 4)
+        all_transformed_pcs_full_seq = apply_transformation_human_data(pc_static, transf_full) # Result: (T, N, 3)
+    else:
+        pcs_orig_list_or_single = get_point_clouds_from_human_data(seq_data)
+        obj_poses_full = seq_data["obj_poses"]
+        all_transformed_pcs_full_seq = apply_transformation_human_data(pcs_orig_list_or_single, obj_poses_full) # Result: (T, ..., N, 3)
+
+    mid_frame_pc_ls_arg = None
+    if all_transformed_pcs_full_seq is not None and mid_frame_idx < (all_transformed_pcs_full_seq.shape[0] if isinstance(all_transformed_pcs_full_seq, np.ndarray) else len(all_transformed_pcs_full_seq)):
+        # Wrap in list as vis_pc_coor_plotly expects List[np.ndarray]
+        # And get_subitem for pc_ls uses pc_ls[0][t] if pc_ls is a list of a single T-dim array.
+        # So we want [ (N,3) ] for the single frame.
+        mid_frame_pc_ls_arg = [get_subitem(all_transformed_pcs_full_seq, mid_frame_idx)]
+
+    # 2. Hand Joints and Mesh
+    mano_hand_joints_full_seq = None
+    hand_verts_full_seq = None # The output from extract_hand_points_and_mesh for meshes (can be List[trimesh])
+    if use_hand:
+        side_joints_key = "h_joints"
+        if side_joints_key in seq_data:
+            mano_hand_joints_full_seq = seq_data[side_joints_key] # (T, 21, 3)
+    else:
+        if "hand_tsls" in seq_data and "hand_coeffs" in seq_data and "side" in seq_data:
+            mano_hand_joints_full_seq, hand_verts_full_seq = extract_hand_points_and_mesh(
+                seq_data["hand_tsls"], seq_data["hand_coeffs"], seq_data["side"]
+            )
+
+    mid_frame_gt_hand_joints_arg = get_subitem(mano_hand_joints_full_seq, mid_frame_idx, not_list=False)
+
+    # Call vis_pc_coor_plotly to get the data for the single frame
+    data = vis_pc_coor_plotly(
+        pc_ls=mid_frame_pc_ls_arg,
+        gt_hand_joints=mid_frame_gt_hand_joints_arg,
         show_axis=True,
-        filename=filename if filename else None
+        return_data=True, # Get the data list back to create a custom figure
     )
 
+    fig = go.Figure(data=data)
+
+    # Set z-down camera perspective and other layout options
+    fig.update_layout(
+        scene=dict(
+            aspectmode="data",
+            xaxis_visible=True,
+            yaxis_visible=True,
+            zaxis_visible=True,
+            xaxis=dict(backgroundcolor="rgba(0,0,0,0)", title="X"),
+            yaxis=dict(backgroundcolor="rgba(0,0,0,0)", title="Y"),
+            zaxis=dict(backgroundcolor="rgba(0,0,0,0)", title="Z"),
+            camera=dict(
+                up=dict(x=0, y=0, z=-1),  # Z-axis points downwards in the screen
+                center=dict(x=0, y=0, z=0), # Center of the view
+                eye=dict(x=1.25, y=1.25, z=1.25) # Camera position (adjust as needed for better view)
+            )
+        ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        title=f"Mid Frame Visualization (Frame {mid_frame_idx})"
+    )
+
+    # Save as PNG
+    filename = f"{filename}.png"
+    fig.write_image(filename)
+    print(f"Mid-frame visualization saved to {filename}")
 
 
 def visualize_dex_hand_sequence(seq_data, filename: Optional[str] = None):
@@ -1008,7 +1094,6 @@ def vis_single_frame_with_offset(pc: np.ndarray, gt_hand_joints: torch.Tensor,
         data.extend(hand_joints_data)
 
     return data
-
 
 
 def vis_grid(seq_data_ls, filename=None):
@@ -1182,7 +1267,7 @@ def vis_grid(seq_data_ls, filename=None):
 import plotly.colors
 
 
-def vis_as_frame(seq_data_ls, filename=None):
+def vis_as_frame(seq_data_ls, filename=None, check_frame_ls=[60]):
     """
     将多个序列可视化为动画中的连续帧。
 
@@ -1209,13 +1294,14 @@ def vis_as_frame(seq_data_ls, filename=None):
     )))
     
     num_unique_objects = len(unique_mesh_paths)
+    print(f"Found {num_unique_objects} unique object meshes across {len(seq_data_ls)} sequences.")
     object_colors = plotly.colors.sample_colorscale(
         'OrRd', np.linspace(0.3, 0.9, num_unique_objects)
     )
     path_to_color = {path: color for path, color in zip(unique_mesh_paths, object_colors)}
 
     mesh_cache = {}
-    for path in unique_mesh_paths:
+    for path in tqdm(unique_mesh_paths):
         mesh = o3d.io.read_triangle_mesh(path)
         target_faces = 200
         if len(mesh.triangles) > target_faces:
@@ -1234,133 +1320,172 @@ def vis_as_frame(seq_data_ls, filename=None):
         [0, 13, 14, 15, 16], [0, 17, 18, 19, 20]
     ]
 
-    # === 2. 主循环: 为每个序列构建一个动画帧 ===
-    frames = []
-    num_items = len(seq_data_ls)
-    if num_items == 0: return
+    for check_frame in check_frame_ls:
+        # === 2. 主循环: 为每个序列构建一个动画帧 ===
+        frames = []
+        num_items = len(seq_data_ls)
+        if num_items == 0: return
 
-    print("Processing each sequence to create an animation frame...")
-    for iid, seq_data in tqdm(enumerate(seq_data_ls)):
-        # 每个帧的数据都将存储在这个列表中
-        frame_data = []
+        print("Processing each sequence to create an animation frame...")
+        for iid, seq_data in tqdm(enumerate(seq_data_ls)):
+            # 每个帧的数据都将存储在这个列表中
+            frame_data = []
 
-        # --- 2.1 处理当前帧的物体网格 ---
-        all_mesh_verts_local, all_mesh_faces_local = [], []
-        vertex_offset = 0
-        poses = seq_data["obj_poses"] @ seq_data['mesh_norm_trans']
-        
-        for obj_ii, mesh_path in enumerate(seq_data["object_mesh_path"]):
-            cached_mesh = mesh_cache[mesh_path]
-            verts, faces = cached_mesh['vertices'], cached_mesh['faces']
-
-            # 不再需要 offset，所有物体都在原点附近
-            transformed_verts = apply_transformation_to_vertices(verts * 0.01, poses[obj_ii, 60])
+            # --- 2.1 处理当前帧的物体网格 ---
+            all_mesh_verts_local, all_mesh_faces_local = [], []
+            vertex_offset = 0
+            poses = seq_data["o_transf"]
             
-            all_mesh_verts_local.append(transformed_verts)
-            all_mesh_faces_local.append(faces + vertex_offset)
-            vertex_offset += len(verts)
-        
-        if all_mesh_verts_local:
-            final_verts = np.concatenate(all_mesh_verts_local, axis=0)
-            final_faces = np.concatenate(all_mesh_faces_local, axis=0)
-            
-            frame_data.append(go.Mesh3d(
-                x=final_verts[:, 0], y=final_verts[:, 1], z=final_verts[:, 2],
-                i=final_faces[:, 0], j=final_faces[:, 1], k=final_faces[:, 2],
-                color=path_to_color.get(seq_data["object_mesh_path"][0], 'red'),
-                opacity=0.8,
-                lighting=dict(ambient=0.4, diffuse=1.0, specular=0.5),
-                lightposition=dict(x=100, y=200, z=0),
-                name="Object",
-            ))
+            for obj_ii, mesh_path in enumerate(seq_data["object_mesh_path"]):
+                cached_mesh = mesh_cache[mesh_path]
+                verts, faces = cached_mesh['vertices'], cached_mesh['faces']
 
-            edge_x, edge_y, edge_z = [], [], []
-            for i, j, k in final_faces:
-                p0, p1, p2 = final_verts[i], final_verts[j], final_verts[k]
-                edge_x.extend([p0[0], p1[0], p1[0], p2[0], p2[0], p0[0], None])
-                edge_y.extend([p0[1], p1[1], p1[1], p2[1], p2[1], p0[1], None])
-                edge_z.extend([p0[2], p1[2], p1[2], p2[2], p2[2], p0[2], None])
+                # 不再需要 offset，所有物体都在原点附近
+                transformed_verts = apply_transformation_to_vertices(verts * 0.01, poses[obj_ii, check_frame])
+                
+                all_mesh_verts_local.append(transformed_verts)
+                all_mesh_faces_local.append(faces + vertex_offset)
+                vertex_offset += len(verts)
+            
+            if all_mesh_verts_local:
+                final_verts = np.concatenate(all_mesh_verts_local, axis=0)
+                final_faces = np.concatenate(all_mesh_faces_local, axis=0)
+                
+                frame_data.append(go.Mesh3d(
+                    x=final_verts[:, 0], y=final_verts[:, 1], z=final_verts[:, 2],
+                    i=final_faces[:, 0], j=final_faces[:, 1], k=final_faces[:, 2],
+                    color=path_to_color.get(seq_data["object_mesh_path"][0], 'red'),
+                    opacity=0.8,
+                    lighting=dict(ambient=0.4, diffuse=1.0, specular=0.5),
+                    lightposition=dict(x=100, y=200, z=0),
+                    name="Object",
+                ))
+
+                edge_x, edge_y, edge_z = [], [], []
+                for i, j, k in final_faces:
+                    p0, p1, p2 = final_verts[i], final_verts[j], final_verts[k]
+                    edge_x.extend([p0[0], p1[0], p1[0], p2[0], p2[0], p0[0], None])
+                    edge_y.extend([p0[1], p1[1], p1[1], p2[1], p2[1], p0[1], None])
+                    edge_z.extend([p0[2], p1[2], p1[2], p2[2], p2[2], p0[2], None])
+                
+                frame_data.append(go.Scatter3d(
+                    x=edge_x, y=edge_y, z=edge_z, mode='lines',
+                    line=dict(color='black', width=0.5), showlegend=False
+                ))
+
+            # --- 2.2 处理当前帧的手部姿态 ---
+            mano_hand_joints = seq_data["h_joints"]
+            hand_joints_np = mano_hand_joints[check_frame].cpu().numpy() # 不再需要 offset
+
+            line_x, line_y, line_z = [], [], []
+            for connection in FINGER_CONNECTIONS_21:
+                for i in range(len(connection) - 1):
+                    p1, p2 = hand_joints_np[connection[i]], hand_joints_np[connection[i+1]]
+                    line_x.extend([p1[0], p2[0], None])
+                    line_y.extend([p1[1], p2[1], None])
+                    line_z.extend([p1[2], p2[2], None])
             
             frame_data.append(go.Scatter3d(
-                x=edge_x, y=edge_y, z=edge_z, mode='lines',
-                line=dict(color='black', width=0.5), showlegend=False
+                x=line_x, y=line_y, z=line_z, mode='lines',
+                line=dict(color='blue', width=8), name="Hand Skeleton", showlegend=False
             ))
 
-        # --- 2.2 处理当前帧的手部姿态 ---
-        mano_hand_joints = seq_data['hand_joints']
-        hand_joints_np = mano_hand_joints[60].cpu().numpy() # 不再需要 offset
+            frame_data.append(go.Scatter3d(
+                x=hand_joints_np[:, 0], y=hand_joints_np[:, 1], z=hand_joints_np[:, 2],
+                mode='markers',
+                marker=dict(size=5, color='green'), name="Hand Joints", showlegend=False
+            ))
+            
+            # 将处理完的帧数据打包成一个 go.Frame 对象
+            frames.append(go.Frame(data=frame_data, name=f"Sequence {iid} {seq_data['which_sequence']}"))
 
-        line_x, line_y, line_z = [], [], []
-        for connection in FINGER_CONNECTIONS_21:
-            for i in range(len(connection) - 1):
-                p1, p2 = hand_joints_np[connection[i]], hand_joints_np[connection[i+1]]
-                line_x.extend([p1[0], p2[0], None])
-                line_y.extend([p1[1], p2[1], None])
-                line_z.extend([p1[2], p2[2], None])
+            imgfig = go.Figure(data=frame_data)
+            imgfig.update_layout(
+                scene=dict(
+                    aspectmode="data",
+                    xaxis_visible=True,
+                    yaxis_visible=True,
+                    zaxis_visible=True,
+                    xaxis=dict(backgroundcolor="rgba(0,0,0,0)", title="X"),
+                    yaxis=dict(backgroundcolor="rgba(0,0,0,0)", title="Y"),
+                    zaxis=dict(backgroundcolor="rgba(0,0,0,0)", title="Z"),
+                    camera=dict(
+                        up=dict(x=0, y=0, z=-1),  # Z-axis down
+                        center=dict(x=0, y=0, z=0),
+                        eye=dict(x=1.25, y=1.25, z=1.25) # Default viewpoint
+                    )
+                ),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                title=f"Sequence {iid} {seq_data['which_sequence']}"
+            )
+            imgfig.write_image(f"./dataset/logs/taco_vis/{check_frame}/seq_{iid}_{seq_data['which_sequence']}.png")
+
+        # === 3. 创建并组装最终的动画图表 ===
+        if not frames:
+            print("No frames were generated.")
+            return
+
+        # 使用第一帧的数据作为初始显示
+        initial_data = frames[0].data
+
+        # 创建滑块步骤
+        slider_steps = []
+        for i in range(num_items):
+            step = dict(
+                method="animate",
+                label=f"{i}",
+                args=[[f"Sequence {i} {seq_data['which_sequence']}"],
+                    dict(frame=dict(duration=0, redraw=True),
+                        mode="immediate",
+                        transition=dict(duration=0))])
+            slider_steps.append(step)
+
+        # 创建布局，包含滑块和播放/暂停按钮
+        layout = go.Layout(
+            title=f"Animated Visualization of {num_items} items",
+            scene=dict(
+                aspectmode='data',
+                xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False),
+            ),
+            updatemenus=[dict(
+                type="buttons",
+                buttons=[
+                    dict(label="Play", method="animate", args=[None, dict(frame=dict(duration=100, redraw=True), fromcurrent=True, mode="immediate")]),
+                    dict(label="Pause", method="animate", args=[[None], dict(frame=dict(duration=0, redraw=False), mode="immediate")])
+                ]
+            )],
+            sliders=[dict(
+                active=0,
+                steps=slider_steps,
+                currentvalue=dict(font=dict(size=20), prefix="Sequence: ", visible=True)
+            )]
+        )
+
+        # 生成图表
+        fig = go.Figure(data=initial_data, layout=layout, frames=frames)
+        fig.update_layout(
+            scene=dict(
+                aspectmode="data",
+                xaxis_visible=True,
+                yaxis_visible=True,
+                zaxis_visible=True,
+                xaxis=dict(backgroundcolor="rgba(0,0,0,0)", title="X"),
+                yaxis=dict(backgroundcolor="rgba(0,0,0,0)", title="Y"),
+                zaxis=dict(backgroundcolor="rgba(0,0,0,0)", title="Z"),
+                # camera=dict(
+                #     up=dict(x=0, y=0, z=-1),  # Z-axis points downwards in the screen
+                #     center=dict(x=0, y=0, z=0), # Center of the view
+                #     eye=dict(x=1.25, y=1.25, z=1.25) # Camera position (adjust as needed for better view)
+                # )
+            ),
+        )
         
-        frame_data.append(go.Scatter3d(
-            x=line_x, y=line_y, z=line_z, mode='lines',
-            line=dict(color='blue', width=8), name="Hand Skeleton", showlegend=False
-        ))
-
-        frame_data.append(go.Scatter3d(
-            x=hand_joints_np[:, 0], y=hand_joints_np[:, 1], z=hand_joints_np[:, 2],
-            mode='markers',
-            marker=dict(size=5, color='green'), name="Hand Joints", showlegend=False
-        ))
-        
-        # 将处理完的帧数据打包成一个 go.Frame 对象
-        frames.append(go.Frame(data=frame_data, name=f"Sequence {iid}"))
-
-    # === 3. 创建并组装最终的动画图表 ===
-    if not frames:
-        print("No frames were generated.")
-        return
-
-    # 使用第一帧的数据作为初始显示
-    initial_data = frames[0].data
-
-    # 创建滑块步骤
-    slider_steps = []
-    for i in range(num_items):
-        step = dict(
-            method="animate",
-            label=f"{i}",
-            args=[[f"Sequence {i}"],
-                  dict(frame=dict(duration=0, redraw=True),
-                       mode="immediate",
-                       transition=dict(duration=0))])
-        slider_steps.append(step)
-
-    # 创建布局，包含滑块和播放/暂停按钮
-    layout = go.Layout(
-        title=f"Animated Visualization of {num_items} items",
-        scene=dict(
-            aspectmode='data',
-            xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False),
-        ),
-        updatemenus=[dict(
-            type="buttons",
-            buttons=[
-                dict(label="Play", method="animate", args=[None, dict(frame=dict(duration=100, redraw=True), fromcurrent=True, mode="immediate")]),
-                dict(label="Pause", method="animate", args=[[None], dict(frame=dict(duration=0, redraw=False), mode="immediate")])
-            ]
-        )],
-        sliders=[dict(
-            active=0,
-            steps=slider_steps,
-            currentvalue=dict(font=dict(size=20), prefix="Sequence: ", visible=True)
-        )]
-    )
-
-    # 生成图表
-    fig = go.Figure(data=initial_data, layout=layout, frames=frames)
-
-    if filename is not None:
-        fig.write_html(f'{filename}.html')
-        print(f"Figure saved to {filename}.html")
-    else:
-        fig.show()
+        if filename is not None:
+            fig.write_html(f'{filename}_f{check_frame}.html')
+            print(f"Figure saved to {filename}_f{check_frame}.html")
+        else:
+            fig.show()
 
 
 def visualize_dex_hand_sequence_together(seq_data_ls, name_list, filename: Optional[str] = None):

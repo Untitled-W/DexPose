@@ -50,7 +50,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/base_link_left.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/base_link_left.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="-1.570795 0.0 6.123233995731376e-17"/>
     </visual>
@@ -83,7 +83,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_0.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_0.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -101,7 +101,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_1.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_1.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -119,7 +119,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_2.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_2.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -137,7 +137,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_3.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_3.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -155,13 +155,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_tip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_tip.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 -0.012" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/collision/link_tip.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/collision/link_tip.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 -0.012" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -174,7 +174,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_0.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_0.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -192,7 +192,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_1.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_1.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -210,7 +210,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_2.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_2.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -228,7 +228,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_3.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_3.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -246,13 +246,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_tip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_tip.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 -0.012" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/collision/link_tip.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/collision/link_tip.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 -0.012" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -265,7 +265,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_0.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_0.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -283,7 +283,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_1.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_1.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -301,7 +301,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_2.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_2.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -319,7 +319,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_3.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_3.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -337,13 +337,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_tip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_tip.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 -0.012" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/collision/link_tip.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/collision/link_tip.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 -0.012" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -356,7 +356,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_12.0_left.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_12.0_left.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="3.14159 2.220446049250313e-16 -1.6248551233397535e-22"/>
     </visual>
@@ -375,7 +375,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_13.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_13.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -393,7 +393,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_14.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_14.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -411,7 +411,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_15.0.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_15.0.glb"/>
       </geometry>
     </visual>
     <collision>
@@ -429,13 +429,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/visual/link_tip.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/visual/link_tip.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 -0.012" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/allegro_hand/meshes/collision/link_tip.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/allegro_hand/meshes/collision/link_tip.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 -0.012" rpy="0.0 0.0 0.0"/>
     </collision>

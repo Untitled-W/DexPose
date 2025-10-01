@@ -51,7 +51,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/visual/right_base_link.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/visual/right_base_link.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </visual>
@@ -112,13 +112,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/visual/right_thumb_proximal_base.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/visual/right_thumb_proximal_base.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/collision/right_thumb_proximal_base.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/collision/right_thumb_proximal_base.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -131,13 +131,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/visual/right_thumb_proximal.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/visual/right_thumb_proximal.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/collision/right_thumb_proximal.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/collision/right_thumb_proximal.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -150,13 +150,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/visual/right_thumb_intermediate.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/visual/right_thumb_intermediate.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/collision/right_thumb_intermediate.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/collision/right_thumb_intermediate.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -169,13 +169,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/visual/right_thumb_distal.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/visual/right_thumb_distal.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/collision/right_thumb_distal.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/collision/right_thumb_distal.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -188,13 +188,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/visual/right_index_proximal.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/visual/right_index_proximal.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/collision/right_index_proximal.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/collision/right_index_proximal.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -207,13 +207,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/visual/right_index_intermediate.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/visual/right_index_intermediate.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/collision/right_index_intermediate.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/collision/right_index_intermediate.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -226,13 +226,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/visual/right_index_proximal.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/visual/right_index_proximal.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/collision/right_index_proximal.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/collision/right_index_proximal.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -245,13 +245,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/visual/right_middle_intermediate.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/visual/right_middle_intermediate.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/collision/right_middle_intermediate.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/collision/right_middle_intermediate.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -264,13 +264,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/visual/right_index_proximal.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/visual/right_index_proximal.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/collision/right_index_proximal.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/collision/right_index_proximal.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -283,13 +283,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/visual/right_index_intermediate.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/visual/right_index_intermediate.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/collision/right_index_intermediate.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/collision/right_index_intermediate.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -302,13 +302,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/visual/right_index_proximal.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/visual/right_index_proximal.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/collision/right_index_proximal.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/collision/right_index_proximal.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
@@ -321,13 +321,13 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/visual/right_pinky_intermediate.glb"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/visual/right_pinky_intermediate.glb"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="/home/qianxu/Desktop/Project/DexPose/thirdparty/dex-retargeting/assets/robots/hands/inspire_hand/meshes/collision/right_pinky_intermediate.obj"/>
+        <mesh filename="/home/wangminqi/workspace/test/packages/hands/inspire_hand/meshes/collision/right_pinky_intermediate.obj"/>
       </geometry>
       <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
     </collision>
