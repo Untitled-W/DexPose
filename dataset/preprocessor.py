@@ -309,6 +309,11 @@ class TACOProcessor(BaseDatasetProcessor):
                         tool_name = file_name.split(".")[0].split("_")[-1]
                     elif file_name.startswith("target_"):
                         target_name = file_name.split(".")[0].split("_")[-1]
+                        
+                if f'{task_name}-{seq_name}' in [
+
+                ]:
+                    tool_name, target_name = target_name, tool_name
                 
                 if tool_name is None or target_name is None:
                     continue
@@ -774,10 +779,12 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
         print(f"Dataset {dataset_name} has {len(data_list)} sequences")
         
         # sampled_data = random.sample(list(zip(data_list,range(len(data_list)))), 5)
-        sampled_data = list(zip(data_list,range(len(data_list))))
+        # sampled_data = list(zip(data_list,range(len(data_list))))
         # for (d, idx) in sampled_data:
-            # visualize_human_sequence(d, f'/home/wangminqi/workspace/test/DexPose/dataset/logs/({idx})_{d["which_dataset"]}_{d["which_sequence"]}_{d["side"]}')
-        vis_as_frame(data_list[:5], f'/home/wangminqi/workspace/test/DexPose/dataset/logs/{dataset_name}_human', [0, 30, 60, 61])
+        #     visualize_human_sequence(d, f'/home/wangminqi/workspace/test/DexPose/dataset/logs/({idx})_{d["which_dataset"]}_{d["which_sequence"]}_{d["side"]}')
+        # vis_as_frame(data_list[:5], f'/home/wangminqi/workspace/test/DexPose/dataset/logs/{dataset_name}_human', [0, 30, 60])
+        vis_as_frame(data_list, f'/home/qianxu/Desktop/Project/DexPose/dataset/logs/{dataset_name}_human', check_frame_ls=[60], if_render=True)
+
 
 if __name__ == "__main__":
 
@@ -787,17 +794,21 @@ if __name__ == "__main__":
     # dataset_names = ['oakinkv2']
     processed_data = []
     
-    GENERATE = False
+    GENERATE = True
     if GENERATE:
         setup_logging()
-        processed_data = process_multiple_datasets(dataset_names, )#[{'sequence_indices': list(range(5))}])
+        processed_data = process_multiple_datasets(dataset_names, [{'sequence_indices': [59,60], 'seq_data_name': 'debug4'}])
+        # processed_data = process_multiple_datasets(dataset_names, [{'seq_data_name': 'mirror_correct'}])
+
     else:
         for dataset_name in dataset_names:
-            file_path = os.path.join(DATASET_CONFIGS[dataset_name]['save_path'],f'seq_{DATASET_CONFIGS[dataset_name]["seq_data_name"]}_{DATASET_CONFIGS[dataset_name]["task_interval"]}.p')
+            file_path = os.path.join(DATASET_CONFIGS[dataset_name]['save_path'],'seq_mirror_correct_1.p')
             with open(file_path, 'rb') as f:
                 data = pickle.load(f)
-                processed_data.extend(data)
+            for i in range(len(data)):
+                data[i]['object_mesh_path'] = [ii.replace('/home/wangminqi/workspace/test/data', '/home/qianxu/Desktop/Project/DexPose/data') for ii in data[i]['object_mesh_path']]
+            processed_data.extend(data)
 
-    # show_human_statistics(processed_data)
+        # show_human_statistics(processed_data)
     
-    check_data_correctness_by_vis(processed_data)
+        check_data_correctness_by_vis(processed_data)

@@ -649,8 +649,10 @@ def main_retarget(seq_data_ls, robots):
             print(f"Processing sequence with {robot_name} from {seq_data['which_dataset']} with {seq_data['which_sequence']}")
             retargeted_seq, losses_1, losses_2 = retarget_sequence(seq_data, robot_hand)
             retargeted_data.append(retargeted_seq)
-            losses_1_all.append(losses_1)
-            losses_2_all.append(losses_2)
+            # losses_1_all.append(losses_1)
+            # losses_2_all.append(losses_2)
+            with open("/home/wangminqi/workspace/test/DexPose/retarget_wmq/Taco_vis/loss.log", "a") as f:
+                f.write(f"Index {i} {seq_data['which_dataset']} {seq_data['which_sequence']} Stage 2: {[f'{k}: {v[-10:].mean():.4f}' for k, v in losses_2.items()]}\n")
         processed_data[robot_hand] = retargeted_data
 
         if False:
@@ -683,7 +685,7 @@ if __name__ == "__main__":
     from tqdm import tqdm
 
     robots = ['shadow_hand']
-    file_path = '/home/wangminqi/workspace/test/data/Taco/human_save0929/seq_feature_1.p'
+    file_path = '/home/wangminqi/workspace/test/data/Taco/human_save0929/seq_mirror_correct_1.p'
     import pickle
     with open(file_path, 'rb') as f:
         seq_data_ls = pickle.load(f)[8:9]

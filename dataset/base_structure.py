@@ -17,8 +17,8 @@ WMQ_IS_USING = True
 
 if WMQ_IS_USING:
 
-    # data_root = '/home/qianxu/Desktop/Project/DexPose/data'
-    data_root = '/home/wangminqi/workspace/test/data'
+    data_root = '/home/qianxu/Desktop/Project/DexPose/data'
+    # data_root = '/home/wangminqi/workspace/test/data'
 
     ORIGIN_DATA_PATH = {
         "Taco": os.path.join(data_root, "Taco"),
@@ -141,8 +141,10 @@ class BaseDatasetProcessor(ABC):
         os.makedirs(save_path, exist_ok=True)
         if os.path.isfile(self.seq_save_path): os.remove(self.seq_save_path)
 
-        self.manolayer_left = ManoLayer(center_idx=0, side='left', use_pca=False, rot_mode='quat', mano_assets_root="/home/wangminqi/workspace/test/packages").cuda()
-        self.manolayer_right = ManoLayer(center_idx=0, side='right', use_pca=False, rot_mode='quat', mano_assets_root="/home/wangminqi/workspace/test/packages").cuda()
+        # self.manolayer_left = ManoLayer(center_idx=0, side='left', use_pca=False, rot_mode='quat', mano_assets_root="/home/wangminqi/workspace/test/packages").cuda()
+        # self.manolayer_right = ManoLayer(center_idx=0, side='right', use_pca=False, rot_mode='quat', mano_assets_root="/home/wangminqi/workspace/test/packages").cuda()
+        self.manolayer_left = ManoLayer(center_idx=0, side='left', use_pca=False, rot_mode='quat').cuda()
+        self.manolayer_right = ManoLayer(center_idx=0, side='right', use_pca=False, rot_mode='quat').cuda()
 
         if self.feature_on:
             self.renderer = MeshRenderer3D()
@@ -208,76 +210,44 @@ class BaseDatasetProcessor(ABC):
             raise ValueError(f"Object transformation data for side '{side}' is None.")
 
         ### object
-        if type(data_dict['o_transf']) is list:
-            obj_transf_list_m = []
-            for obj_transf in data_dict['o_transf']:
-                transl_m = obj_transf[:, :3, 3].clone()
-                rot_m = obj_transf[:, :3, :3].clone()
+        # if type(data_dict['o_transf']) is list:
+        # obj_transf_list_m = []
+        # for obj_transf in data_dict['o_transf']:
+        #     transl_m = obj_transf[:, :3, 3].clone()
+        #     rot_m = obj_transf[:, :3, :3].clone()
 
-                transl_m[..., 0] *= -1
-                rot_m = matrix_to_axis_angle(rot_m)
-                rot_m[..., [1, 2]] *= -1
-                rot_m = axis_angle_to_matrix(rot_m)
+        #     transl_m[..., 0] *= -1
+        #     rot_m = matrix_to_axis_angle(rot_m)
+        #     rot_m[..., [1, 2]] *= -1
+        #     rot_m = axis_angle_to_matrix(rot_m)
 
-                obj_transf_m = torch.eye(4).to(obj_transf.device).repeat(obj_transf.shape[0], 1, 1)
-                obj_transf_m[:, :3, :3] = rot_m
-                obj_transf_m[:, :3, 3] = transl_m
-                obj_transf_list_m.append(obj_transf_m)
-            
-            obj_points_list_m = []
-            for obj_points in data_dict['o_points']:
-                obj_points_m = obj_points.clone()
-                obj_points_m[..., 0] *= -1
-                obj_points_list_m.append(obj_points_m)
-            
-            # obj_points_ori_list_m = []
-            # for obj_points_ori in data_dict['o_points_ori']:
-            #     obj_points_ori_m = obj_points_ori.clone()
-            #     obj_points_ori_m[..., 0] *= -1
-            #     obj_points_ori_list_m.append(obj_points_ori_m)
-            
-            # obj_normals_list_m = []
-            # for obj_normals in data_dict['o_normals']:
-            #     obj_normals_m = obj_normals.clone()
-            #     obj_normals_m[..., 0] *= -1
-            #     obj_normals_list_m.append(obj_normals_m)
-            
-            # obj_normals_ori_list_m = []
-            # for obj_normals_ori in data_dict['o_normals_ori']:
-            #     obj_normals_ori_m = obj_normals_ori.clone()
-            #     obj_normals_ori_m[..., 0] *= -1
-            #     obj_normals_ori_list_m.append(obj_normals_ori_m)
-            
-            if data_dict['o_features'] is not None:
-                obj_features_list_m = [obj_features.clone() for obj_features in data_dict['o_features']]
-            else: 
-                obj_features_list_m = None
+        #     obj_transf_m = torch.eye(4).to(obj_transf.device).repeat(obj_transf.shape[0], 1, 1)
+        #     obj_transf_m[:, :3, :3] = rot_m
+        #     obj_transf_m[:, :3, 3] = transl_m
+        #     obj_transf_list_m.append(obj_transf_m)
+        
+        # obj_points_list_m = []
+        # for obj_points in data_dict['o_points']:
+        #     obj_points_m = obj_points.clone()
+        #     obj_points_m[..., 0] *= -1
+        #     obj_points_list_m.append(obj_points_m)
+        
+        obj_transf_list_m = []
+        for obj_transf in data_dict['o_transf']:
+            obj_transf_m = obj_transf.clone()
+            reflect_matrix_homo = torch.tensor([
+                [-1, 0, 0, 0],
+                [0, 1, 0, 0],
+                [0, 0, 1, 0],
+                [0, 0, 0, 1]
+            ], dtype=torch.float32).to(obj_transf.device)
+            obj_transf_m = torch.matmul(reflect_matrix_homo, obj_transf_m)
+            obj_transf_list_m.append(obj_transf_m)
 
-        else:
-            obj_transf = data_dict['o_transf'] # (T, 4, 4)
-            transl_m = obj_transf[:, :3, 3].clone()
-            rot_m = obj_transf[:, :3, :3].clone()
-
-            transl_m[..., 0] *= -1
-            rot_m = matrix_to_axis_angle(rot_m)
-            rot_m[..., [1, 2]] *= -1
-            rot_m = axis_angle_to_matrix(rot_m)
-
-            obj_transf_m = torch.eye(4).to(obj_transf.device).repeat(obj_transf.shape[0], 1, 1)
-            obj_transf_m[:, :3, :3] = rot_m
-            obj_transf_m[:, :3, 3] = transl_m
-            obj_transf_list_m = obj_transf_m
-
-            obj_points_m = data_dict['o_points'].clone()
-            obj_points_m[..., 0] *= -1
-            obj_points_list_m = obj_points_m
-
-            # if data_dict['o_normals'] is None:
-            #     obj_normals_list_m = None
-            # else:
-            #     obj_normals_m = data_dict['o_normals'].clone()
-            #     obj_normals_m[..., 0] *= -1
-            #     obj_normals_list_m = obj_normals_m
+        if data_dict['o_features'] is not None:
+            obj_features_list_m = [obj_features.clone() for obj_features in data_dict['o_features']]
+        else: 
+            obj_features_list_m = None
 
         ### hand
         hand_joints_m = data_dict['h_joints'].clone()
@@ -286,15 +256,7 @@ class BaseDatasetProcessor(ABC):
         hand_tsl_m[..., 0] *= -1
 
         hand_coeffs_m = data_dict['h_coeffs'].clone()
-        R = quaternion_to_matrix(hand_coeffs_m[...,0,:])
-        reflection_matrix = torch.tensor([
-            [-1, 0, 0],
-            [0, 1, 0],
-            [0, 0, 1]
-        ], dtype=torch.float32)
-        R_symmetric = torch.matmul(reflection_matrix, R)
-        q_symmetric = matrix_to_quaternion(R_symmetric)
-        hand_coeffs_m[...,0,:] = q_symmetric
+        hand_coeffs_m[:, :, 1] = -hand_coeffs_m[:, :, 1]
 
         hand_params:torch.Tensor = data_dict['h_params'].clone()
         hand_params[..., -3] *= -1
@@ -316,7 +278,7 @@ class BaseDatasetProcessor(ABC):
             'h_params': hand_params_m,
 
             'o_transf': torch.stack(obj_transf_list_m),
-            'o_points': obj_points_list_m,
+            'o_points': data_dict['o_points'],
             'o_features': obj_features_list_m,
             
             'contact_indices': copy.deepcopy(data_dict['contact_indices']),
@@ -527,6 +489,18 @@ class BaseDatasetProcessor(ABC):
             'which_sequence': raw_data['which_sequence'],
             'uid': uid,
         }
+
+        ### Debug object transformation ###
+        from utils.wmq import vis_frames_plotly
+        vis_frames_plotly(
+            pc_ls=[apply_transformation_human_data(sequence_data['o_points'], sequence_data['o_transf'])],
+            gt_hand_joints=sequence_data['h_joints'].cpu(),
+            object_mesh_ls=apply_transformation_on_object_mesh(get_object_meshes_from_human_data(sequence_data), sequence_data['o_transf']),
+            show_axis=True,
+            filename=f"/home/qianxu/Desktop/Project/DexPose/dataset/logs/debug/{sequence_data['which_sequence']}_original"
+        )
+        ### Debug object transformation ###
+
         if side == 'l':
             sequence_data = self.mirror_data(sequence_data, side)
         
@@ -550,6 +524,28 @@ class BaseDatasetProcessor(ABC):
         #                    show_axis=True)
         # #### DEBUG CODE
 
+            ### Debug object transformation ###
+            from utils.wmq import vis_frames_plotly
+            vis_frames_plotly(
+                pc_ls=[apply_transformation_human_data(sequence_data['o_points'], sequence_data['o_transf'])],
+                gt_hand_joints=sequence_data['h_joints'].cpu(),
+                object_mesh_ls=apply_transformation_on_object_mesh(get_object_meshes_from_human_data(sequence_data), sequence_data['o_transf']),
+                show_axis=True,
+                filename=f"/home/qianxu/Desktop/Project/DexPose/dataset/logs/debug/{sequence_data['which_sequence']}_mirrored"
+            )
+            ### Debug object transformation ###
+
+            # ### Debug hand coeffs ###
+            # from utils.wmq import vis_frames_plotly
+            # from utils.tools import extract_hand_points_and_mesh
+            # vis_frames_plotly(
+            #     pc_ls=[apply_transformation_human_data(sequence_data['o_points'], sequence_data['o_transf'])],
+            #     gt_hand_joints=extract_hand_points_and_mesh(sequence_data["h_tsl"], sequence_data["h_coeffs"], sequence_data["side"])[0],
+            #     object_mesh_ls=apply_transformation_on_object_mesh(get_object_meshes_from_human_data(sequence_data), sequence_data['o_transf']),
+            #     show_axis=True,
+            #     filename="yyy_2"
+            # )
+        
         return sequence_data
 
     def process_all_sequences(self, sequence_indices: List[int]) -> List[Dict[str, Any]]:

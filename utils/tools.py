@@ -664,22 +664,8 @@ def apply_transformation_on_object_mesh(
     return transformed_meshes_per_object
 
 
-def extract_hand_points_and_mesh_manopth(hand_tsls, hand_coeffs, side):
-    from manopth.manolayer import ManoLayer
-    if side == 0:
-        mano_layer = ManoLayer(center_idx=0, side='left', use_pca=False).cuda()
-    else:
-        mano_layer = ManoLayer(center_idx=0, side='right', use_pca=False).cuda()
 
-
-    hand_verts, hand_joints = mano_layer(quaternion_to_axis_angle(hand_coeffs.to('cuda')).reshape(-1, 48)) # manopth use axis_angle and should be (B, 48)
-    hand_joints = hand_joints.cpu().numpy() * 0.001 # if using manotorch, you don't need that!
-    hand_verts = hand_verts.cpu().numpy() * 0.001
-    hand_joints += hand_tsls.cpu().numpy()[...,None,:]
-
-    return hand_joints, hand_verts
-
-def extract_hand_points_and_mesh_manotorch(hand_tsls, hand_coeffs, side):
+def extract_hand_points_and_mesh(hand_tsls, hand_coeffs, side):
     from manotorch.manolayer import ManoLayer
 
     # it should be true
@@ -697,7 +683,7 @@ def extract_hand_points_and_mesh_manotorch(hand_tsls, hand_coeffs, side):
             mano_layer = ManoLayer(side='right', use_pca=False).cuda()
 
 
-    output = mano_layer(quaternion_to_axis_angle(hand_coeffs.to('cuda')).reshape(-1, 48)) # manopth use axis_angle and should be (B, 48)
+    output = mano_layer(quaternion_to_axis_angle(hand_coeffs.to('cuda')).reshape(-1, 48))
     hand_verts, hand_joints = output.verts, output.joints
     hand_joints = hand_joints.cpu().numpy()
     hand_verts = hand_verts.cpu().numpy()
@@ -717,7 +703,14 @@ def extract_hand_points_and_mesh_manotorch(hand_tsls, hand_coeffs, side):
 
     return hand_joints, hand_verts
 
-extract_hand_points_and_mesh = extract_hand_points_and_mesh_manotorch
+# import torch
+# from pytorch3d.transforms import quaternion_to_axis_angle
+# from manotorch.manolayer import ManoLayer
+# x_coeffs, x_tsl = torch.rand((1,16,4)).cuda(), torch.rand(1,3).cuda()
+# jj1 = (ManoLayer(center_idx=0, side='right', use_pca=False, rot_mode='quat').cuda()(x_coeffs, torch.zeros((1,10)).cuda()).joints + x_tsl).cpu()
+# jj3 = (ManoLayer(center_idx=0, side='right', use_pca=False).cuda()(quaternion_to_axis_angle(x_coeffs.to('cuda')).reshape(-1, 48)).joints + x_tsl).cpu()
+# print(torch.sum(torch.abs(jj3-jj1)))
+
 
 def compute_hand_geometry(hand_pose_frame, mano_layer):
     # pose parameters all zero, no hand is detected
