@@ -9,6 +9,7 @@ tmp
 0929vis
 *.zip
 *.pth
+Taco_vis
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

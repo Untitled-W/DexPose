@@ -567,7 +567,6 @@ class BaseDatasetProcessor(ABC):
             for seq_data in sequence_list:
                 for side in ['l', 'r']:
                     if seq_data.get(f'{side}_valid', True):  # Check if this side has valid data
-                        uid += 1
                         # if uid < 683:
                         #     continue
                         print(f"Processing {idx}: {seq_data['which_dataset']}-{seq_data['which_sequence']} on side {side}")
@@ -581,6 +580,8 @@ class BaseDatasetProcessor(ABC):
                             print("####################")
                             print(f"Processed UID {uid} sequences, {len(whole_data_ls)} saved")
                             print("####################")
+                            uid += 1
+                        
                         else:
                             erro_n += 1
                             print("####################")

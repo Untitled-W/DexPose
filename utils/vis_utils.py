@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import os
-from typing import List, Dict, Optional, Tuple, Union
+from typing import List, Dict, Optional, Tuple, Union, Any
 import warnings
 from tqdm import tqdm
 from sklearn.decomposition import PCA
@@ -29,7 +29,8 @@ from .tools import (cosine_similarity,
                     get_object_meshes_from_human_data,
                     apply_transformation_human_data,
                     apply_transformation_on_object_mesh)
-from .hand_model import load_robot
+# from .hand_model import load_robot
+from retarget_wmq.robot_wrapper import load_robot, HandRobotWrapper
 
 def arange_pixels(
     resolution=(128, 128),
@@ -330,7 +331,13 @@ def _extract_mesh_data(mesh: Union[Meshes, Dict]) -> Tuple[np.ndarray, np.ndarra
 
 
 
-def get_vis_hand_keypoints_with_color_gradient_and_lines(gt_posi_pts: np.ndarray, color_scale='Viridis', finger_groups=None, emphasize_idx=None):
+def get_vis_hand_keypoints_with_color_gradient_and_lines(
+    gt_posi_pts: np.ndarray, 
+    marker_size: float = 5, # 添加了 marker_size 参数
+    line_width: float = 2, # 添加了 line_width 参数
+    color_scale='Viridis', 
+    finger_groups=None, 
+    emphasize_idx=None):
     """
     Visualize the 21 hand key points with different colors for different fingers,
     decreasing opacity based on the distance from the root point, and add lines
@@ -381,7 +388,7 @@ def get_vis_hand_keypoints_with_color_gradient_and_lines(gt_posi_pts: np.ndarray
                     y=[gt_posi_pts[idx, 1]], 
                     z=[gt_posi_pts[idx, 2]], 
                     mode='markers', 
-                    marker=dict(size=15, color='green', opacity=1), 
+                    marker=dict(size=marker_size, color='green', opacity=1), 
                     name=f"{finger_name} {j+1}",
                     showlegend=False
                 ))
@@ -391,7 +398,7 @@ def get_vis_hand_keypoints_with_color_gradient_and_lines(gt_posi_pts: np.ndarray
                     y=[gt_posi_pts[idx, 1]], 
                     z=[gt_posi_pts[idx, 2]], 
                     mode='markers', 
-                    marker=dict(size=10, color=finger_color[1], opacity=opacity), 
+                    marker=dict(size=marker_size, color=finger_color[1], opacity=opacity), 
                     name=f"{finger_name} {j+1}",
                     showlegend=False
                 ))
@@ -404,7 +411,7 @@ def get_vis_hand_keypoints_with_color_gradient_and_lines(gt_posi_pts: np.ndarray
                     y=[gt_posi_pts[prev_idx, 1], gt_posi_pts[idx, 1]], 
                     z=[gt_posi_pts[prev_idx, 2], gt_posi_pts[idx, 2]], 
                     mode='lines', 
-                    line=dict(color=finger_color[1], width=10),
+                    line=dict(color=finger_color[1], width=line_width),
                     name=f"{finger_name} Line {j}",
                     showlegend=False
                 ))
@@ -416,7 +423,7 @@ def get_vis_hand_keypoints_with_color_gradient_and_lines(gt_posi_pts: np.ndarray
                 y=[gt_posi_pts[0, 1], gt_posi_pts[indices[0], 1]], 
                 z=[gt_posi_pts[0, 2], gt_posi_pts[indices[0], 2]], 
                 mode='lines', 
-                line=dict(color=finger_color[1], width=12,), 
+                line=dict(color=finger_color[1], width=line_width,), 
                 name=f"Root to {finger_name}",
                 showlegend=False
             ))
@@ -871,6 +878,401 @@ def vis_pc_coor_plotly(
             fig.show()
 
 
+def vis_pc_coor_plotly(
+    pc_ls: Optional[List[np.ndarray]] = None,
+    hand_pts_ls: Optional[List[np.ndarray]] = None,
+    transformation_ls: Optional[List[np.ndarray]] = None,
+    gt_transformation_ls: Optional[List[np.ndarray]] = None,
+    gt_posi_pts: Optional[np.ndarray] = None,
+    posi_pts_ls: Optional[List[np.ndarray]] = None,
+    hand_joints_ls: Optional[List[np.ndarray]] = None,
+    gt_hand_joints: Optional[np.ndarray] = None,
+    opt_points: Optional[np.ndarray] = None,
+    gt_opt_points: Optional[np.ndarray] = None,
+    voxel_dict: Optional[Dict[str, Any]] = None,
+    hand_mesh: Any = None, # 假设是 trimesh 或类似对象
+    hand_mesh_ls: Optional[List[Any]] = None,
+    hand_name_ls: Optional[List[str]] = None,
+    show_axis: bool = False,
+    obj_mesh: Any = None, # 假设是 trimesh 或 trimesh 对象列表
+    obj_mesh_ls: Optional[List[Any]] = None,
+    obj_norm_ls: Optional[List[np.ndarray]] = None,
+    return_data: bool = False,
+    filename: Optional[str] = None,
+):
+    """
+    在 Plotly 中可视化点云和手部网格。
+    输入是一个带有时间轴的列表。
+
+    Args:
+        pc_ls (List[np.ndarray]): 点云列表 (粉色和紫色中等大小的点)
+        hand_pts_ls (List[np.ndarray]): 手部点列表 (橙色小点)
+        transformation_ls (List[np.ndarray]): 变换矩阵列表 (小的坐标系)
+        gt_transformation_ls (List[np.ndarray]): 地面真值变换矩阵列表 (大的坐标系)
+        gt_posi_pts (np.ndarray): 地面真值位置点 (红色大点)
+        posi_pts_ls (List[np.ndarray]): 位置点列表 (蓝色和绿色大点)
+        hand_mesh (trimesh): 手部网格 (宝蓝色)
+        hand_joints_ls (List[np.ndarray]): 手部关节位置列表
+        obj_norm_ls (List[np.ndarray]): 对象法线列表
+        return_data (bool): 如果为 True，则返回 Plotly 数据列表而不是显示图表
+        filename (str): 如果提供，将图表保存为 HTML 文件
+    """
+
+    # --- 开始：用于管理绘图尺寸的新代码结构 ---
+    # 定义宏 IF_PC: 如果为 True, 则所有绘图相关的“尺寸”属性缩小至原值的 1/3。
+    # 如果为 False，则使用原始尺寸。
+    IF_PC = True
+
+    # 根据 IF_PC 决定缩放因子
+    scale_factor = 1/3 if IF_PC else 1
+
+    # 集中管理所有绘图相关的尺寸属性
+    drawing_sizes = {
+        # 坐标系 (Coordinate Frame) 的尺寸和线宽
+        "coord_frame_size": 0.02 * scale_factor,
+        "coord_frame_line_width": 12 * scale_factor,
+
+        # 点云 (Point Clouds) 的标记点尺寸
+        "pc_marker_size": 5 * scale_factor,
+
+        # 手部点 (Hand Points) 的标记点尺寸
+        "hand_pts_marker_size": 3 * scale_factor,
+
+        # 位置点 (Position Points) 的标记点尺寸
+        "gt_posi_pts_marker_size": 10 * scale_factor,
+        "posi_pts_marker_size": 10 * scale_factor,
+
+        # 优化点/关键点 (Optimized/Key Points) 的标记点尺寸和连接线宽
+        # 注意: 如果 get_vis_hand_keypoints_with_color_gradient_and_lines 函数是外部的，
+        # 则需要在该函数内部也使用这些尺寸或通过参数传递。
+        "keypoint_marker_size": 15 * scale_factor, # get_vis_hand_keypoints_with_color_gradient_and_lines 的默认标记点尺寸
+        "keypoint_line_width": 10 * scale_factor,  # get_vis_hand_keypoints_with_color_gradient_and_lines 的默认线宽
+
+        # 对象法线 (Object Normals) 的长度和线宽
+        "obj_normal_scale": 0.02 * scale_factor,
+        "obj_normal_line_width": 2 * scale_factor,
+
+        # 体素 (Voxel) 的相关视觉属性 (opacity 不是尺寸，但为了一致性放在此处；线宽是尺寸)
+        "voxel_selected_opacity": 0.5, # 选中体素的透明度
+        "voxel_empty_line_width": 1 * scale_factor, # 空体素线框的线宽
+    }
+    # --- 结束：用于管理绘图尺寸的新代码结构 ---
+
+
+    # 定义颜色
+    red = "rgb(255, 0, 0)"
+    green = "rgb(0, 255, 0)"
+    blue = "rgb(0, 0, 255)"
+    # posi_pts_colors = [blue, green] # 此变量在原始代码中定义但未使用
+
+    # 为时间序列中的点设置插值颜色梯度
+    color_gradient_points = plt.get_cmap("Purples")(np.linspace(0.3, 0.8, len(pc_ls))) if pc_ls is not None else []
+    color_gradient_hands = plt.get_cmap("Oranges")(np.linspace(0.3, 0.8, len(hand_pts_ls))) if hand_pts_ls is not None else []
+    color_gradient_hand_mesh = plt.get_cmap("Reds")(np.linspace(0.3, 0.8, len(hand_mesh_ls))) if hand_mesh_ls is not None else []
+    color_gradient_obj_mesh = plt.get_cmap("Blues")(np.linspace(0.3, 0.8, len(obj_mesh_ls))) if obj_mesh_ls is not None else []
+
+    data = []
+
+    def add_coordinate_frame(size: float, opacity: float = 1, transformation: Optional[np.ndarray] = None, name: str = "Coordinate Frame", line_width: float = 12):
+        """辅助函数：添加坐标系 (X, Y, Z 轴) 作为线段"""
+        origin = np.array([[0, 0, 0]])
+        axis = np.array([[size, 0, 0], [0, size, 0], [0, 0, size]])
+        if transformation is not None:
+            origin = pt_transform(origin, transformation)
+            axis = pt_transform(axis, transformation)
+        lines = []
+        colors = ["red", "green", "blue"] # X, Y, Z 轴颜色
+        for i in range(3):
+            lines.append(
+                go.Scatter3d(
+                    x=[origin[0, 0], axis[i, 0]],
+                    y=[origin[0, 1], axis[i, 1]],
+                    z=[origin[0, 2], axis[i, 2]],
+                    mode="lines",
+                    line=dict(color=colors[i], width=line_width), # 使用传入的线宽
+                    opacity=opacity,
+                    name=name + f" {colors[i].capitalize()} Axis",
+                    showlegend=False # 通常不在图例中显示坐标轴线
+                )
+            )
+        return lines
+
+    if voxel_dict is not None:
+        grid_centers = voxel_dict["grid_centers"]
+        selected_points = voxel_dict.get("selected_points", np.empty((0, 3)))
+        vis_empty = voxel_dict.get("vis_empty", True)
+        auto_calc_size = voxel_dict.get("auto_calculate_size", True)
+        voxel_raw_size = voxel_dict.get("voxel_size", (1.0, 1.0, 1.0)) # 原始体素尺寸
+
+        # 将体素尺寸应用于显示，如果 IF_PC 为 True 则进行缩放
+        voxel_display_size = (voxel_raw_size[0] * scale_factor,
+                              voxel_raw_size[1] * scale_factor,
+                              voxel_raw_size[2] * scale_factor)
+
+        def unique_within_tolerance(values: np.ndarray, tol: float = 1e-3) -> np.ndarray:
+            """辅助函数：在容差范围内查找唯一值"""
+            sorted_vals = np.sort(values)
+            merged = [sorted_vals[0]]
+            for x in sorted_vals[1:]:
+                if abs(x - merged[-1]) >= tol:
+                    merged.append(x)
+            return np.array(merged)
+
+        if auto_calc_size:
+            tolerance = 1e-3
+            unique_x = unique_within_tolerance(grid_centers[:, 0], tol=tolerance)
+            unique_y = unique_within_tolerance(grid_centers[:, 1], tol=tolerance)
+            unique_z = unique_within_tolerance(grid_centers[:, 2], tol=tolerance)
+            dx = np.min(np.diff(unique_x)) if unique_x.size > 1 else 0
+            dy = np.min(np.diff(unique_y)) if unique_y.size > 1 else 0
+            dz = np.min(np.diff(unique_z)) if unique_z.size > 1 else 0
+
+            # 如果自动计算，则按比例缩放这些维度
+            voxel_display_size = (dx * scale_factor, dy * scale_factor, dz * scale_factor)
+
+        for center in grid_centers:
+            cx, cy, cz = center
+            # 检查此中心点是否为选定的点之一
+            is_selected = False
+            if selected_points.size > 0:
+                is_selected = np.any(np.all(np.isclose(center, selected_points, atol=1e-6), axis=1)) # 使用 isclose 进行浮点比较
+
+            x_edges = [cx - voxel_display_size[0] / 2, cx + voxel_display_size[0] / 2]
+            y_edges = [cy - voxel_display_size[1] / 2, cy + voxel_display_size[1] / 2]
+            z_edges = [cz - voxel_display_size[2] / 2, cz + voxel_display_size[2] / 2]
+
+            if is_selected:
+                # 对于选中的体素，渲染为实心网格
+                data.append(
+                    go.Mesh3d(
+                        x=[x_edges[0],x_edges[1],x_edges[1],x_edges[0],x_edges[0],x_edges[1],x_edges[1],x_edges[0]],
+                        y=[y_edges[0],y_edges[0],y_edges[1],y_edges[1],y_edges[0],y_edges[0],y_edges[1],y_edges[1]],
+                        z=[z_edges[0],z_edges[0],z_edges[0],z_edges[0],z_edges[1],z_edges[1],z_edges[1],z_edges[1]],
+                        color="blue", opacity=drawing_sizes["voxel_selected_opacity"], alphahull=0,
+                        name="Selected Voxel", showlegend=False
+                    )
+                )
+            elif vis_empty:
+                # 对于空体素，渲染为线框
+                corners = np.array([[x, y, z] for z in z_edges for y in y_edges for x in x_edges])
+                edges = [(0, 1),(1, 3),(3, 2),(2, 0),(4, 5),(5, 7),(7, 6),(6, 4),(0, 4),(1, 5),(2, 6),(3, 7)] # 立方体边
+                x_lines, y_lines, z_lines = [], [], []
+                for edge in edges:
+                    x_lines.extend([corners[edge[0], 0], corners[edge[1], 0], None])
+                    y_lines.extend([corners[edge[0], 1], corners[edge[1], 1], None])
+                    z_lines.extend([corners[edge[0], 2], corners[edge[1], 2], None])
+                data.append(
+                    go.Scatter3d(
+                        x=x_lines, y=y_lines, z=z_lines, mode="lines",
+                        line=dict(color="lightgray", width=drawing_sizes["voxel_empty_line_width"]),
+                        name="Empty Voxel", showlegend=False
+                    )
+                )
+
+    if transformation_ls is not None:
+        for i, transformation in enumerate(transformation_ls):
+            data.extend(add_coordinate_frame(
+                drawing_sizes["coord_frame_size"], 1, transformation,
+                name=f"Transformation {i+1}", line_width=drawing_sizes["coord_frame_line_width"]
+            ))
+
+    if gt_transformation_ls is not None:
+        for i, transformation in enumerate(gt_transformation_ls):
+            data.extend(add_coordinate_frame(
+                drawing_sizes["coord_frame_size"], 0.4, transformation,
+                name=f"GT Transformation {i+1}", line_width=drawing_sizes["coord_frame_line_width"]
+            ))
+
+    if pc_ls is not None:
+        for i, pc in enumerate(pc_ls):
+            color_rgb = [int(c * 255) for c in color_gradient_points[i][:3]]
+            color_str = f"rgb({color_rgb[0]}, {color_rgb[1]}, {color_rgb[2]})"
+            data.append(
+                go.Scatter3d(x=pc[:, 0], y=pc[:, 1], z=pc[:, 2], mode="markers",
+                             marker=dict(size=drawing_sizes["pc_marker_size"], color=color_str),
+                             name=f"Point Cloud {i+1}", showlegend=True)
+            )
+
+    if hand_pts_ls is not None:
+        for i, hand_pts in enumerate(hand_pts_ls):
+            color_rgb = [int(c * 255) for c in color_gradient_hands[i][:3]]
+            color_str = f"rgb({color_rgb[0]}, {color_rgb[1]}, {color_rgb[2]})"
+            data.append(
+                go.Scatter3d(x=hand_pts[:, 0], y=hand_pts[:, 1], z=hand_pts[:, 2], mode="markers",
+                             marker=dict(size=drawing_sizes["hand_pts_marker_size"], color=color_str),
+                             name=f"Hand Points {i+1}", showlegend=True)
+            )
+
+    if gt_posi_pts is not None:
+        data.append(
+            go.Scatter3d(x=gt_posi_pts[:, 0], y=gt_posi_pts[:, 1], z=gt_posi_pts[:, 2],
+                         mode="markers", marker=dict(size=drawing_sizes["gt_posi_pts_marker_size"], color=red),
+                         name="GT Position Points", showlegend=True)
+        )
+
+    if posi_pts_ls is not None:
+        for i, posi_pts in enumerate(posi_pts_ls):
+            # 原始代码中使用固定的“orange”颜色
+            data.append(
+                go.Scatter3d(x=posi_pts[:, 0], y=posi_pts[:, 1], z=posi_pts[:, 2], mode="markers",
+                             marker=dict(size=drawing_sizes["posi_pts_marker_size"], color="orange"),
+                             name=f"Position Points {i+1}", showlegend=True)
+            )
+
+    # 关键点/关节的绘制：
+    # `get_vis_hand_keypoints_with_color_gradient_and_lines` 是外部函数，
+    # 为了使其尺寸受控，我们在调用时传入 `drawing_sizes` 中定义的值。
+    # 这要求 `get_vis_hand_keypoints_with_color_gradient_and_lines` 函数也支持 `marker_size` 和 `line_width` 参数。
+    if opt_points is not None:
+        finger_groups = {"thumb": [0, 1], "index": [2], "middle": [3], "ring": [4], "pinky": [5]}
+        vis_data = get_vis_hand_keypoints_with_color_gradient_and_lines(
+            opt_points[[5, 0, 1, 2, 3, 4]], color_scale="Viridis", finger_groups=finger_groups,
+            marker_size=drawing_sizes["keypoint_marker_size"], line_width=drawing_sizes["keypoint_line_width"]
+        )
+        for trace in vis_data:
+            trace.name = f"Optimized Keypoints - {trace.name}" # 添加更详细的图例名称
+            data.append(trace)
+
+    if gt_opt_points is not None:
+        finger_groups = {"thumb": [0, 1], "index": [2], "middle": [3], "ring": [4], "pinky": [5]}
+        vis_data = get_vis_hand_keypoints_with_color_gradient_and_lines(
+            gt_opt_points[[5, 0, 1, 2, 3, 4]], color_scale="Bluered", finger_groups=finger_groups,
+            marker_size=drawing_sizes["keypoint_marker_size"], line_width=drawing_sizes["keypoint_line_width"]
+        )
+        for trace in vis_data:
+            trace.name = f"GT Optimized Keypoints - {trace.name}"
+            data.append(trace)
+
+    if gt_hand_joints is not None:
+        vis_data = get_vis_hand_keypoints_with_color_gradient_and_lines(
+            gt_hand_joints, color_scale="Bluered",
+            marker_size=drawing_sizes["keypoint_marker_size"], line_width=drawing_sizes["keypoint_line_width"]
+        )
+        for trace in vis_data:
+            trace.name = f"GT Hand Joints - {trace.name}"
+            data.append(trace)
+
+    if hand_joints_ls is not None:
+        for i, hand_joints in enumerate(hand_joints_ls):
+            hand_joints_data = get_vis_hand_keypoints_with_color_gradient_and_lines(
+                hand_joints, color_scale="Plasma",
+                marker_size=drawing_sizes["keypoint_marker_size"], line_width=drawing_sizes["keypoint_line_width"]
+            )
+            for trace in hand_joints_data:
+                trace.name = f"Hand Joints {i+1} - {trace.name}"
+                data.append(trace)
+
+    if hand_mesh is not None:
+        verts = np.asarray(hand_mesh.vertices)
+        faces = np.asarray(hand_mesh.triangles if hasattr(hand_mesh, "triangles") else hand_mesh.faces)
+        data.append(
+            go.Mesh3d(x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
+                      i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
+                      color="royalblue", opacity=0.5, name="Hand Mesh", showlegend=True)
+        )
+
+    if obj_mesh is not None:
+        # 如果 obj_mesh 是单个 mesh 对象，将其视为包含一个元素的列表
+        if not isinstance(obj_mesh, list):
+            obj_mesh = [obj_mesh]
+
+        for i, mesh_item in enumerate(obj_mesh):
+            if mesh_item is None or not hasattr(mesh_item, "vertices"): continue
+            verts = np.asarray(mesh_item.vertices)
+            faces = np.asarray(mesh_item.triangles if hasattr(mesh_item, "triangles") else mesh_item.faces)
+            if verts.size == 0 or faces.size == 0: continue
+            data.append(
+                go.Mesh3d(x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
+                          i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
+                          color="#D3D3D3", opacity=1, name=f"Object Mesh {i}", showlegend=True)
+            )
+
+    if obj_mesh_ls is not None:
+        for i, obj_mesh_item in enumerate(obj_mesh_ls):
+            verts = np.asarray(obj_mesh_item.vertices)
+            faces = np.asarray(obj_mesh_item.triangles if hasattr(obj_mesh_item, "triangles") else obj_mesh_item.faces)
+            color_rgb = [int(c * 255) for c in color_gradient_obj_mesh[i][:3]]
+            color_str = f"rgb({color_rgb[0]}, {color_rgb[1]}, {color_rgb[2]})"
+            data.append(
+                go.Mesh3d(x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
+                            i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
+                            color=color_str, name=f"Object Mesh {i+1}", showlegend=True)
+            )
+
+    if obj_norm_ls is not None:
+        scale = drawing_sizes["obj_normal_scale"] # 使用缩放后的值
+        if pc_ls is None:
+            print("Warning: obj_norm_ls 提供，但 pc_ls 为 None。没有对应的点无法绘制法线。")
+        else:
+            for i, (pc, normals) in enumerate(zip(pc_ls, obj_norm_ls)):
+                color_rgb = [int(c * 255) for c in color_gradient_points[i][:3]]
+                color_str = f"rgb({color_rgb[0]}, {color_rgb[1]}, {color_rgb[2]})"
+                x_lines, y_lines, z_lines = [], [], []
+
+                # 安全地归一化法线
+                norms = np.linalg.norm(normals, axis=1, keepdims=True)
+                # 对于法线长度为零的点避免除以零
+                normalized_normals = np.divide(normals, norms, out=np.zeros_like(normals), where=norms != 0)
+
+                for point, normal in zip(pc, normalized_normals):
+                    start, end = point, point + scale * normal
+                    x_lines.extend([start[0], end[0], None])
+                    y_lines.extend([start[1], end[1], None])
+                    z_lines.extend([start[2], end[2], None])
+                data.append(
+                    go.Scatter3d(x=x_lines, y=y_lines, z=z_lines, mode="lines",
+                                 line=dict(color=color_str, width=drawing_sizes["obj_normal_line_width"]), # 使用缩放后的线宽
+                                 name=f"Object Normals {i+1}", showlegend=True)
+                )
+
+    if hand_mesh_ls is not None:
+        for i, hand_mesh_item in enumerate(hand_mesh_ls):
+            verts = np.asarray(hand_mesh_item.vertices)
+            faces = np.asarray(hand_mesh_item.triangles if hasattr(hand_mesh_item, "triangles") else hand_mesh_item.faces)
+            color_rgb = [int(c * 255) for c in color_gradient_hand_mesh[i][:3]]
+            color_str = f"rgb({color_rgb[0]}, {color_rgb[1]}, {color_rgb[2]})"
+
+            # 从提供的列表中确定手部网格的名称
+            mesh_name = f"Hand Mesh {i+1}"  # 默认/回退名称
+            if hand_name_ls is not None and i < len(hand_name_ls):
+                mesh_name = hand_name_ls[i]
+
+            data.append(
+                go.Mesh3d(x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
+                          i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
+                          color=color_str, opacity=0.5, name=mesh_name, showlegend=True)
+            )
+
+    if return_data:
+        return data
+    else:
+        fig = go.Figure(data=data)
+        fig.update_layout(
+            scene=dict(
+                aspectmode="data", # 保持宽高比固定
+                xaxis_visible=show_axis,
+                yaxis_visible=show_axis,
+                zaxis_visible=show_axis,
+                xaxis=dict(backgroundcolor="rgba(0,0,0,0)", title="X", showgrid=show_axis, zeroline=show_axis),
+                yaxis=dict(backgroundcolor="rgba(0,0,0,0)", title="Y", showgrid=show_axis, zeroline=show_axis),
+                zaxis=dict(backgroundcolor="rgba(0,0,0,0)", title="Z", showgrid=show_axis, zeroline=show_axis),
+            ),
+            paper_bgcolor="rgba(0,0,0,0)", # 整个画布背景透明
+            plot_bgcolor="rgba(0,0,0,0)", # 绘图区域背景透明
+            legend=dict( # 添加图例自定义，使其更清晰
+                x=1, y=1,
+                xanchor="right", yanchor="top",
+                bgcolor="rgba(255,255,255,0.8)", # 半透明白色背景
+                bordercolor="Black",
+                borderwidth=1
+            )
+        )
+
+        if filename is not None:
+            fig.write_html(f"{filename}.html")
+        else:
+            fig.show()
+
 
 def visualize_human_sequence(seq_data, filename: Optional[str] = None, use_pc=False, use_hand=False):
     
@@ -916,20 +1318,23 @@ def visualize_dex_hand_sequence(seq_data, filename: Optional[str] = None):
 
     ### robot hand meshes ###
     hand_meshes = []
-    for i in tqdm(range(seq_data["hand_poses"].shape[0])):
-        robot.set_qpos(seq_data["hand_poses"][i])
-        hand_mesh = robot.get_hand_mesh()
-        hand_meshes.append(hand_mesh)
+    # for i in tqdm(range(seq_data["hand_poses"].shape[0])):
+        # robot.set_qpos(seq_data["hand_poses"][i])
+        # hand_mesh = robot.get_hand_mesh()
+        # hand_meshes.append(hand_mesh)
+    robot.compute_forward_kinematics(seq_data['dex_poses'])
+    for i in tqdm(range(seq_data["seq_len"])):
+        hand_meshes.append(robot.get_trimesh_data_single(i))
 
     ### hand joints ###
-    mano_hand_joints, hand_verts = extract_hand_points_and_mesh(seq_data["hand_tsls"], seq_data["hand_coeffs"], seq_data["side"])
-    # mano_hand_joints = seq_data["hand_joints"] # Tx21x3
+    # mano_hand_joints, hand_verts = extract_hand_points_and_mesh(seq_data["hand_tsls"], seq_data["hand_coeffs"], seq_data["side"])
+    mano_hand_joints = seq_data["h_joints"] # Tx21x3
 
     ### point clouds ###
     pc = get_point_clouds_from_human_data(seq_data)
-    pc_ls = apply_transformation_human_data(pc, seq_data["obj_poses"]) # TxNx3
+    pc_ls = apply_transformation_human_data(pc, seq_data["o_transf"]) # TxNx3
     object_mesh = get_object_meshes_from_human_data(seq_data)   
-    object_ls = apply_transformation_on_object_mesh(object_mesh, seq_data["obj_poses"]) # a list of (B) a list of (T) meshes
+    object_ls = apply_transformation_on_object_mesh(object_mesh, seq_data["o_transf"]) # a list of (B) a list of (T) meshes
 
     vis_frames_plotly(
         pc_ls=[pc_ls],

@@ -215,7 +215,7 @@ def _rotation_matrix_between_vectors(a: torch.Tensor, b: torch.Tensor) -> torch.
     b = torch.nn.functional.normalize(b, dim=0)
     
     # The axis of rotation is the cross product of the two vectors
-    v = torch.cross(a, b)
+    v = torch.cross(a, b, dim=-1)
     
     # The sine of the angle is the norm of the cross product
     s = torch.linalg.norm(v)
@@ -917,35 +917,6 @@ class HandRobotWrapper:
         ]
         return torch.cat(points, dim=-2)
 
-    # def get_intersect_(self, M)->bool:
-    #     """
-    #     Get intersection between the hand and the object
-        
-    #     Parameters
-    #     ----------
-    #     points: (N, 3)
-    #         surface points
-        
-    #     Returns
-    #     -------
-    #     intersect: (bool )
-    #         whether the hand intersects with the object
-    #     """
-    #     num_ls = []
-    #     for idx in range(M):
-    #         hand_mesh = self.get_trimesh_data(idx)
-    #         points = self.ref_points
-    #         _, index_ray0 = tt.intersects_id(ray_origins=points, ray_directions=oritation, multiple_hits=True, return_locations=False)
-    #         _, index_ray1 = tt.intersects_id(ray_origins=points, ray_directions=-oritation)
-    #         count0 = np.bincount(index_ray0)
-    #         count1 = np.bincount(index_ray1)
-    #         bool_0 = count0 % 2 != 0
-    #         bool_1 = count1 % 2 != 0
-    #         bool = np.logical_or(bool_0, bool_1)
-    #         num = np.count_nonzero(bool)
-    #         num_ls.append(num)
-    #     num_ls = torch.tensor(num_ls).to(self.device)
-    #     return num_ls
 
     # ------------------------------------------ #
     #       Energy Queries                       #
@@ -962,7 +933,7 @@ class HandRobotWrapper:
         Returns:
             torch.Tensor: 一个标量张量，表示**平均距离**。
         """
-        contact_points = self.get_contact_candidates()
+        contact_points = self.get_contact_candidates() # [B,M,3]
         if contact_points.dim() == 2:
             contact_points = contact_points.unsqueeze(0)
         obj_points_tensor = torch.from_numpy(obj_points).to(dtype=torch.float, device=self.device)
@@ -982,12 +953,12 @@ class HandRobotWrapper:
         # --- Step 4: FIX - Perform the Gather Operation Correctly ---
         nearest_obj_points = torch.gather(expanded_obj_points, 1, index_for_gather)
         nearest_normals = torch.gather(expanded_obj_normals, 1, index_for_gather)
-        vector = contact_points - nearest_obj_points # 形状: [M, 3]
-        signed_distance = (vector * nearest_normals.detach()).sum(dim=-1) # 形状: [M] 我们使用 detach() 来防止梯度流向法线向量
+        vector = contact_points - nearest_obj_points # 形状: [B, M, 3]
+        signed_distance = (vector * nearest_normals.detach()).sum(-1) # 形状: [B, M] 我们使用 detach() 来防止梯度流向法线向量
         # distance = torch.abs(signed_distance).mean()
-        mask = signed_distance < dis_thres
-        signed_distance = signed_distance[mask]
-        distance = torch.square(signed_distance).mean()
+        mask = signed_distance < dis_thres # [B, M]
+        signed_distance = signed_distance * mask # don't use sd[mask]
+        distance = (signed_distance**2).mean(-1)
         
         if return_idx:
             return distance, contact_points, nearest_obj_points
@@ -1052,7 +1023,7 @@ class HandRobotWrapper:
         distance_matrix = torch.linalg.norm(diff_vector, dim=-1)
         dist_matrix = threshold - distance_matrix
         dist_matrix = torch.relu(dist_matrix)
-        penetration_penalty = dist_matrix.mean()
+        penetration_penalty = dist_matrix.mean((-2,-1))
 
         return penetration_penalty
 
@@ -1239,7 +1210,7 @@ class HandRobotWrapper:
         penetration_matrix = torch.relu(pointwise_max_sdf - thres)
 
         # 2. Calculate the final energy (the mean of all positive SDF values)
-        penetration_energy = penetration_matrix.sum()
+        penetration_energy = penetration_matrix.sum(-1)
 
         # 3. If the user doesn't want the points, we can return early.
         if not return_penetrating_points:
@@ -1267,11 +1238,10 @@ class HandRobotWrapper:
 
 
 
-def load_robot(robot_name) -> HandRobotWrapper:
+def load_robot(robot_name, side="right") -> HandRobotWrapper:
 
     assert robot_name in ['shadow_hand', 'inspire_hand', 'ability_hand', 'dclaw_gripper', 'panda_gripper', 'schunk_svh_hand', 'schunk_hand', 'allegro_hand', 'barrett_hand', 'leap_hand'], f"Robot {robot_name} not supported."
     hand_asset_root = os.path.join("/home/wangminqi/workspace/test/packages/hands", robot_name)
-    side = "right"
     robot = HandRobotWrapper(robot_name, os.path.join(hand_asset_root, f'new_{side}_glb.urdf'),
                     os.path.join(hand_asset_root, f'meshes'),
                     n_surface_points=500, device=torch.device('cuda:0'), tip_aug=None)

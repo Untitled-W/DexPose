@@ -311,7 +311,25 @@ class TACOProcessor(BaseDatasetProcessor):
                         target_name = file_name.split(".")[0].split("_")[-1]
                         
                 if f'{task_name}-{seq_name}' in [
-
+                    '(pour in some, kettle, bowl)-20231019_001',
+                    '(pour in some, kettle, bowl)-20231019_027',
+                    '(empty, kettle, bowl)-20231019_004',
+                    '(empty, kettle, bowl)-20231019_002',
+                    '(pour in some, bowl, kettle)-20231019_021',
+                    '(pour in some, bowl, cup)-20231006_261',
+                    '(pour in some, bowl, cup)-20231006_265',
+                    '(pour in some, plate, box)-20230927_049',
+                    '(pour in some, plate, box)-20230928_036',
+                    '(empty, plate, box)-20230928_037',
+                    '(empty, plate, box)-20230927_050',
+                    '(empty, cup, bowl)-20231006_280',
+                    '(empty, cup, bowl)-20231006_276',
+                    '(pour in some, cup, bowl)-20231006_267',
+                    '(pour in some, cup, bowl)-20231006_263',
+                    '(empty, bowl, cup)-20231006_266',
+                    '(empty, bowl, cup)-20231006_278',
+                    '(empty, box, plate)-20230927_048',
+                    '(pour in some, kettle, kettle)-20230926_046'
                 ]:
                     tool_name, target_name = target_name, tool_name
                 

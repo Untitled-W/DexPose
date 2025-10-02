@@ -1,10 +1,16 @@
 import torch
 import numpy as np
+import joblib
+import os
 from matplotlib import pyplot as plt
 
 from .robot_wrapper import load_robot, HandRobotWrapper
 # from utils.hand_model import load_robot
 
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="pytorch3d.transforms.rotation_conversions")
+
+print_once = (lambda: (lambda num=[0]: lambda *a, **k: (print(*a, **k), num.__setitem__(0, 1)) if num[0] == 0 else None)())
 
 def visualize_time_series_with_fill_between(losses_all_dict: dict, title: str = "Loss Distribution Over Timesteps", filename: str = "Loss_Distribution.png"):
     """
@@ -68,9 +74,6 @@ def visualize_time_series_with_fill_between(losses_all_dict: dict, title: str = 
     plt.savefig(filename)
 
 def quat_to_aa_wmq_0(quat, side='right'):
-    """
-    quat is not batched
-    """
     from pytransform3d import rotations
     operator2mano = {
         "right": np.array([
@@ -81,15 +84,12 @@ def quat_to_aa_wmq_0(quat, side='right'):
                     [0, 0, -1],
                     [1, 0, 0],
                     [0, -1, 0]])}
-    euler = rotations.euler_from_matrix(
-            rotations.matrix_from_quaternion(quat) @ operator2mano[side], 0, 1, 2, extrinsic=False
-        )
-    return euler
+    euler = np.tile([rotations.euler_from_matrix(
+            rotations.matrix_from_quaternion(q) @ operator2mano[side], 0, 1, 2, extrinsic=False
+        ) for q in quat], (quat.shape[0],16,3))
+    return torch.from_numpy(euler)
 
 def quat_to_aa_wmq(quat, side='right'):
-    """
-    quat is not batched
-    """
     from pytorch3d.transforms import quaternion_to_matrix, matrix_to_euler_angles
     operator2mano = {
         "right": np.array([
@@ -99,7 +99,8 @@ def quat_to_aa_wmq(quat, side='right'):
         "left": np.array([
                     [0, 0, -1],
                     [1, 0, 0],
-                    [0, -1, 0]])}
+                    [0, -1, 0]])
+    }
     euler = matrix_to_euler_angles(quaternion_to_matrix(quat) @ operator2mano[side], 'XYZ')
     return euler
 
@@ -108,7 +109,6 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
     device = robot_hand.device
 
     side = seq_data['side']
-    seq_data['o_transf'] = seq_data['o_transf'].unsqueeze(0)
 
     # Init robot hand transformation
     init_hand_tsl, init_hand_quat = seq_data['h_joints'][:, 0], seq_data['h_coeffs'][:, 0]
@@ -124,174 +124,19 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
     dex_pose[:, :3] = (init_hand_tsl - robot_hand.get_joint_world_coordinates_dict()["WRJ1"]).clone()
     dex_pose.requires_grad_(True)
     
-    if True:
-        # ### Test hand orientation ###
-        # seq_data['which_hand']='shadow_hand'
-        # seq_data['hand_poses'] = dex_pose
-        # visualize_dex_hand_sequence_together([seq_data], [robot_hand.robot_name], filename="retarget/0912/xx")
-        # import sys;sys.exit()
-        # ### Test hand orientation ###
-
-        
-        # ### Test finger keypoints ###
-        # robot_hand.compute_forward_kinematics(dex_pose)
-        # mano_fingertip = seq_data['h_joints'][:, [5, 8, 9, 12, 13, 16, 17, 20, 4]].to(device)
-        # fingertip_keypoints = robot_hand.get_tip_points()
-        # vis_frames_plotly(
-        #             # pc_ls=[np.tile(kwargs['point_cloud'], (T, 1, 1))], 
-        #             gt_hand_joints=seq_data['hand_joints'].cpu().numpy(),
-        #             gt_posi_pts=mano_fingertip.cpu().numpy(),
-        #             posi_pts_ls=[fingertip_keypoints.detach().cpu().numpy()],
-        #             hand_mesh_ls=[robot_hand.get_trimesh_data()], 
-        #             show_line=True,
-        #             filename=f"retarget/0912/test_finger_keypoints")
-        # import sys;sys.exit()
-        # ### Test finger keypoints ###
-
-
-        # ### Test hand keypoints order and joints order ###
-        # qq = torch.zeros(robot_hand.dof)
-        # qq[3:6] = torch.from_numpy(quat_to_aa_wmq_0(torch.zeros(4)))
-        # robot_hand.compute_forward_kinematics(qq)
-        # robot_keypoints = robot_hand.get_joint_world_coordinates_dict()
-        # from utils.tools import extract_hand_points_and_mesh
-        # human_keypoints, _ = extract_hand_points_and_mesh((seq_data['hand_tsls'][0]), torch.zeros_like(seq_data['hand_coeffs'][0]), "right")
-        # from utils.wmq import visualize_hand_and_joints
-        # visualize_hand_and_joints(
-        #     mano_joint=human_keypoints[0],
-        #     robot_keypoints=robot_keypoints,
-        #     robot_hand_mesh=robot_hand.get_trimesh_data()[0],
-        #     human_keypoints=human_keypoints[0],
-        #     filename="retarget/0912/test_hand_joints_order"
-        # )
-        # import sys;sys.exit()
-        # ### Test hand keypoints order and joints order ###
-
-        # ### Test hand links ###
-        # data_traces = []
-        # qq = torch.zeros(robot_hand.n_dofs)
-        # qq[3:6] = torch.from_numpy(quat_to_aa_wmq_0(torch.zeros(4)))
-        # robot_hand.compute_forward_kinematics(qq)
-        # from utils.tools import extract_hand_points_and_mesh
-        # human_keypoints, _ = extract_hand_points_and_mesh((seq_data['hand_tsls'][0]), torch.zeros_like(seq_data['hand_coeffs'][0]), "right")
-        # import plotly.graph_objects as go
-        # for link_name in robot_hand.mesh:
-        #     import open3d as o3d
-        #     transform_for_t = robot_hand.current_status[link_name]
-        #     v_tensor = transform_for_t.transform_points(robot_hand.mesh[link_name]['vertices'])
-        #     v_numpy = v_tensor.detach().cpu().numpy()
-        #     f_numpy = robot_hand.mesh[link_name]['faces'].detach().cpu().numpy()
-        #     mesh_item = o3d.geometry.TriangleMesh(
-        #             vertices=o3d.utility.Vector3dVector(v_numpy),
-        #             triangles=o3d.utility.Vector3iVector(f_numpy)
-        #         )
-        #     verts = np.asarray(mesh_item.vertices)
-        #     faces = np.asarray(mesh_item.triangles if hasattr(mesh_item, "triangles") else mesh_item.faces)
-        #     data_traces.append(go.Mesh3d(x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
-        #                         i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
-        #                         color="#914E02", opacity=0.5, name=link_name, showlegend=True))
-        # human_keypoints_np = human_keypoints[0]
-        # from utils.wmq import get_vis_hand_keypoints_with_color_gradient_and_lines
-        # skeleton_traces = get_vis_hand_keypoints_with_color_gradient_and_lines(
-        #     human_keypoints_np, 
-        #     color_scale='Reds'
-        # )
-        # data_traces.extend(skeleton_traces)
-        # fig = go.Figure(data=data_traces)
-        # fig.update_layout(
-        #     title="MANO vs. Robot Joint and Mesh Comparison",
-        #     scene=dict(aspectmode='data', xaxis_title='X', yaxis_title='Y', zaxis_title='Z'),
-        #     legend_title_text='Joints & Meshes',
-        #     margin=dict(l=0, r=0, b=0, t=40)
-        # )
-        # filename = f"retarget/0912/(2)good_wrist/test_hand_links"
-        # fig.write_html(f"{filename}.html")
-        # print(f"Visualization saved to {filename}.html")
-        # import sys;sys.exit()
-        # ### Test hand links ###
-
-        # ### Test penetration order ###
-        # qq = torch.zeros(robot_hand.dof)
-        # qq[3:6] = torch.from_numpy(quat_to_aa_wmq_0(torch.zeros(4)))
-        # robot_hand.compute_forward_kinematics(qq)
-        # robot_keypoints = {ii:v for ii, v in enumerate(robot_hand.get_penetration_keypoints())}
-        # print(len(list(robot_keypoints.keys())))
-        # from utils.tools import extract_hand_points_and_mesh
-        # human_keypoints, _ = extract_hand_points_and_mesh((seq_data['hand_tsls'][0]), torch.zeros_like(seq_data['hand_coeffs'][0]), "right")
-        # from utils.wmq import visualize_hand_and_joints
-        # visualize_hand_and_joints(
-        #     robot_keypoints=robot_keypoints,
-        #     robot_hand_mesh=robot_hand.get_trimesh_data()[0],
-        #     filename="retarget/0912/(2)pose_initialization/test_penetration_order"
-        # )
-        # import sys;sys.exit()
-        # ### Test penetration order ###
-
-        # # Init robot hand pose (only fingertips align)
-        # history = {"mesh":[], "keypoints":[]}
-        # check_frame = 60
-        # total_step = 150
-        # lr = 0.05
-        # init_optimizer = torch.optim.Adam([dex_pose], lr=lr, weight_decay=0)
-        # mano_fingertip = seq_data['h_joints'][:, [5, 8, 9, 12, 13, 16, 17, 20, 4]].to(device)
-        # for ii in tqdm(range(total_step), desc="Initial alignment"):
-        #     robot_hand.compute_forward_kinematics(dex_pose[check_frame])
-        #     fingertip_keypoints = robot_hand.get_tip_points()
-        #     history["keypoints"].append(fingertip_keypoints.detach().cpu().numpy())
-        #     history["mesh"].append(robot_hand.get_trimesh_data())
-        #     loss = torch.nn.functional.huber_loss(fingertip_keypoints, mano_fingertip[check_frame], reduction='sum')
-        #     init_optimizer.zero_grad()
-        #     loss.backward()
-        #     init_optimizer.step()
-
-
-        # ### Test batched get_all_joints_in_mano_order ###
-        # robot_hand.compute_forward_kinematics(dex_pose)
-        # fingertip_keypoints = robot_hand.get_tip_points()
-        # joints_dict = robot_hand.get_joint_world_coordinates_dict()
-        # joints = robot_hand.get_all_joints_in_mano_order()
-        # print(joints.shape) # T x 21 x 3
-        # robot_hand.compute_forward_kinematics(dex_pose[0])
-        # fingertip_keypoints = robot_hand.get_tip_points()
-        # joints_dict = robot_hand.get_joint_world_coordinates_dict()
-        # joints = robot_hand.get_all_joints_in_mano_order()
-        # print(joints.shape) # 21 x 3
-        # import sys;sys.exit()
-        # ### Test batched get_all_joints_in_mano_order ###
-
-        # ### Init robot hand pose (all joints align)
-        # # history = {"mesh":[], "keypoints":[]}
-        # # losses = {}
-        # # check_frame = 90
-        # total_step = 200
-        # lr = 0.01
-        # # for lr in [0.1, 0.05, 0.01]:
-        #     # losses[lr] = []
-        # init_optimizer = torch.optim.Adam([dex_pose], lr=lr, weight_decay=0)
-        # # TODO Fix later. This should return corresponding hand keypoints for different hands.
-        # mano_fingertip = seq_data['h_joints'].to(device)#[check_frame]
-        # for ii in tqdm(range(total_step), desc="Initial alignment"):
-        #     robot_hand.compute_forward_kinematics(dex_pose)#[check_frame])
-        #     fingertip_keypoints = robot_hand.get_all_joints_in_mano_order()
-        #     loss = torch.nn.functional.huber_loss(fingertip_keypoints, mano_fingertip, reduction='sum')
-        #     # history["keypoints"].append(fingertip_keypoints.detach().cpu().numpy())
-        #     # history["mesh"].append(robot_hand.get_trimesh_data())
-        #     # losses[lr].append(loss.item())
-        #     init_optimizer.zero_grad()
-        #     loss.backward()
-        #     init_optimizer.step()
-        # ###
-        pass
-
     # Init robot hand pose (all joints align)
     total_step = 200
     lr = 0.01
-    sp_coeffs = 1
+    sp_coeffs = .5
     thres = 0.02
     logger_1 = {
-        "is_plot": False,
+        "is_plot_optimize": False,
+        "is_plot_timestep": True,
         "is_vis": False,
-        "check_frame": 90,
+        "optimize_frame_check_ls": [30, 60, 90],
+        "vis_frame": 90,
+        "vis_interval": 10,
+        'plot_interval': 20,
         "history": {"hand_mesh":[], "robot_keypoints":[]},
         "losses": {"E_align":[], f"E_spen x{sp_coeffs}":[]}
     }
@@ -300,58 +145,103 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
     for ii in tqdm(range(total_step), desc="Initial alignment"):
         robot_hand.compute_forward_kinematics(dex_pose)
         fingertip_keypoints = robot_hand.get_all_joints_in_mano_order()
-        E_align = torch.nn.functional.huber_loss(fingertip_keypoints, mano_fingertip, reduction='sum')
+        E_align = torch.nn.functional.huber_loss(fingertip_keypoints, mano_fingertip, reduction='none').mean((-2,-1))
         E_spen = robot_hand.self_penetration_part(thres)
-        loss = E_align + E_spen * sp_coeffs
+        loss = E_align.sum() + E_spen.mean() * sp_coeffs # (B,) --> ()
         init_optimizer.zero_grad()
         loss.backward()
         init_optimizer.step()
-        if logger_1['is_vis']:
-            logger_1['history']['hand_mesh'].append(robot_hand.get_trimesh_data_single(logger_1['check_frame']))
-            logger_1['history']['robot_keypoints'].append(fingertip_keypoints[logger_1['check_frame']].detach().cpu().numpy())
-        logger_1['losses']['E_align'].append(E_align.item())
-        logger_1['losses'][f"E_spen x{sp_coeffs}"].append(E_spen.item())
+        if logger_1['is_vis'] and ii % logger_1['vis_interval'] == 0:
+            logger_1['history']['hand_mesh'].append(robot_hand.get_trimesh_data_single(logger_1['vis_frame']))
+            logger_1['history']['robot_keypoints'].append(fingertip_keypoints[logger_1['vis_frame']].detach().cpu().numpy())
+        logger_1['losses']['E_align'].append(E_align.detach().numpy().tolist())
+        logger_1['losses'][f"E_spen x{sp_coeffs}"].append(E_spen.detach().numpy().tolist())
 
-    filename = f"retarget_wmq/0929vis/stage1_spen{sp_coeffs}_step{total_step}_lr{lr}_{seq_data['which_sequence']}_frame{logger_1['check_frame']}"
+    folder_name = "/home/wangminqi/workspace/test/DexPose/retarget_wmq/Taco_vis"
+    config_name = f"stage1_spen{sp_coeffs}_thres{thres}_step{total_step}_lr{lr}"
+    filename = f"uid{seq_data['uid']}_{seq_data['which_sequence']}"
     if logger_1['is_vis']:
+        os.makedirs(os.path.join(folder_name, config_name, f"vis_frame{logger_1['vis_frame']}"), exist_ok=True)
         from utils.wmq import vis_frames_plotly
+        TT = len(logger_1["history"]["hand_mesh"])
         vis_frames_plotly(
-                gt_hand_joints=seq_data['h_joints'][logger_1['check_frame']].expand(total_step, -1, -1).cpu().numpy(),
-                gt_posi_pts=mano_fingertip[logger_1['check_frame']].expand(total_step, -1, -1).cpu().numpy(),
-                posi_pts_ls=[np.stack(logger_1['history']['robot_keypoints'])],
-                hand_mesh_ls=[[i for i in logger_1["history"]["hand_mesh"]]],
-                show_line=True,
-                filename=filename)
-    if logger_1['is_plot']:
+            gt_hand_joints=seq_data['h_joints'][logger_1['vis_frame']].expand(TT, -1, -1).cpu().numpy(),
+            gt_posi_pts=mano_fingertip[logger_1['vis_frame']].expand(TT, -1, -1).cpu().numpy(),
+            posi_pts_ls=[np.stack(logger_1['history']['robot_keypoints'])],
+            hand_mesh_ls=[logger_1["history"]["hand_mesh"]],
+            show_line=True,
+            filename=os.path.join(folder_name, config_name, f"vis_frame{logger_1['vis_frame']}", filename)
+        )
+    if logger_1['is_plot_optimize']:
+        os.makedirs(os.path.join(folder_name, config_name, 'optim'+'_'.join(map(str, logger_1['optimize_frame_check_ls']))), exist_ok=True)
         from matplotlib import pyplot as plt
-        plt.figure()
-        for lr in logger_1['losses']:
-            loss_item = np.stack(logger_1['losses'][lr])
-            plt.plot(np.arange(len(loss_item)), loss_item, label=lr)
-        plt.yscale('log')
-        plt.xlabel("Step")
-        plt.ylabel("Loss")
-        plt.legend()
-        plt.savefig(f"{filename}.png")
+        fig, axs = plt.subplots(1, len(logger_1["optimize_frame_check_ls"]), figsize=(6 * len(logger_1["optimize_frame_check_ls"]), 5))
+        if len(logger_1["optimize_frame_check_ls"]) == 1: axs = [axs]
+        for idx, ff_n in enumerate(logger_1["optimize_frame_check_ls"]):
+            ax = axs[idx]
+            for lr in logger_1['losses']:
+                loss_item = np.stack([ii[ff_n] for ii in logger_1['losses'][lr]])
+                ax.plot(np.arange(len(loss_item)), loss_item, label=lr)
+            ax.set_yscale('log')
+            ax.set_xlabel("Step")
+            ax.set_ylabel("Loss")
+            ax.legend()
+            ax.set_title(f"Frame {ff_n}")
+        plt.tight_layout()
+        plt.savefig(os.path.join(folder_name, config_name, 'optim'+'_'.join(map(str, logger_1['optimize_frame_check_ls'])), filename+'.png'))
+        plt.close()
+    if logger_1["is_plot_timestep"]:
+        os.makedirs(os.path.join(folder_name, config_name, "sequence_losses"), exist_ok=True)
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import to_rgba
+
+        steps   = total_step
+        T       = seq_data['seq_len']
+        plot_iv = logger_1.get('plot_interval', 1)
+        idx_plt = np.arange(0, steps, plot_iv)
+
+        n_loss  = len(logger_1['losses'])
+        fig, axs = plt.subplots(n_loss, 1, figsize=(8, 2*n_loss), sharex=True)
+        if n_loss == 1: axs = [axs]
+
+        cmap = plt.get_cmap('Greys')
+        norm = plt.Normalize(vmin=0, vmax=len(idx_plt)-1)
+
+        for ax_idx, (name, loss_mat) in enumerate(logger_1['losses'].items()):
+            ax = axs[ax_idx]
+            for j, opt_i in enumerate(idx_plt):
+                color = to_rgba(cmap(norm(j)))
+                ax.plot(range(T), loss_mat[opt_i], color=color, label=f'step {opt_i}' if j%max(1, len(idx_plt)//5)==0 else "")
+            ax.set_ylabel(name)
+            ax.set_yscale('log')
+            if ax_idx==0:
+                ax.legend(bbox_to_anchor=(1.02,1), loc='upper left', fontsize=6)
+        plt.xlabel('time step')
+        plt.tight_layout()
+        plt.savefig(os.path.join(folder_name, config_name, "sequence_losses", f"{filename}.png"))
         plt.close()
 
     # Optimize qpos for better contact + less penetration + less self-penetration
     total_step = 200
     lr = 0.01
-    sp_coeffs = 10
+    sp_coeffs = 5
     thres = 0.02
-    dis_coeffs = 200
+    dis_coeffs = 1
     dis_thres = 0.01
     pen_coeffs = 0.005
     pen_thres = 0.005
     logger_2 = {
-        "is_plot": False,
+        "is_plot_optimize": False,
+        "is_plot_timestep": True,
         "is_vis": False,
-        "check_frame": 90,
+        "optimize_frame_check_ls": [30, 60, 90],
+        "vis_frame": 90,
+        "vis_interval": 10,
+        "plot_interval": 20,
         "history": {"hand_mesh":[], "robot_keypoints":[], "ct_pts":[], "corr_ct_pts":[],"spen":[], "inner_pts":[], "outer_pts":[]},
         "losses": {"E_align":[], f"E_spen x{sp_coeffs}":[], f"E_dist x{dis_coeffs}":[], f"E_pen x{pen_coeffs}":[]}
     }
-    check_frame = logger_2['check_frame']
+    check_frame = logger_2["vis_frame"]
     next_optimizer = torch.optim.Adam([dex_pose], lr=lr, weight_decay=0)
     mano_fingertip = seq_data['h_joints'].to(device)
     from utils.tools import get_point_clouds_from_human_data, apply_transformation_human_data, get_object_meshes_from_human_data, apply_transformation_on_object_mesh
@@ -573,71 +463,130 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
         robot_hand.compute_forward_kinematics(dex_pose)
         fingertip_keypoints = robot_hand.get_align_points()
         fingertip_keypoints = robot_hand.get_all_joints_in_mano_order()
-        E_align = torch.nn.functional.huber_loss(fingertip_keypoints, mano_fingertip, reduction='sum')
+        E_align = torch.nn.functional.huber_loss(fingertip_keypoints, mano_fingertip, reduction='none').mean((-2,-1))
         E_dis, ct_pts, cc_ct_pts = robot_hand.cal_distance(pc_ls, pc_norm_ls, dis_thres, True)
         E_pen, inner_pts, outer_pts = robot_hand.cal_object_penetration(pc_ls, pen_thres, True)
         E_spen = robot_hand.self_penetration_part(thres)
-        loss = E_spen * sp_coeffs + E_pen * pen_coeffs + E_dis * dis_coeffs + E_align
+        loss = E_spen.mean() * sp_coeffs + E_pen.mean() * pen_coeffs + E_dis.mean() * dis_coeffs + E_align.sum()
         next_optimizer.zero_grad()
         loss.backward()
         next_optimizer.step()
-        if logger_2["is_vis"]:
+        if logger_2["is_vis"] and ii % logger_2['vis_interval'] == 0:
             logger_2["history"]["hand_mesh"].append(robot_hand.get_trimesh_data_single(check_frame))
             logger_2["history"]["robot_keypoints"].append(fingertip_keypoints[check_frame].detach().cpu().numpy())
             logger_2["history"]["ct_pts"].append(ct_pts[check_frame].detach().cpu().numpy())
             logger_2["history"]["corr_ct_pts"].append(cc_ct_pts[check_frame].detach().cpu().numpy())
             logger_2["history"]["outer_pts"].append(outer_pts[check_frame].detach().cpu().numpy())
-        logger_2["history"]["inner_pts"].append(inner_pts[check_frame].detach().cpu().numpy())
-        logger_2["losses"]["E_align"].append(E_align.item())
-        logger_2["losses"][f"E_spen x{sp_coeffs}"].append(E_spen.item())
-        logger_2["losses"][f"E_dist x{dis_coeffs}"].append(E_dis.item())
-        logger_2["losses"][f"E_pen x{pen_coeffs}"].append(E_pen.item())
+        logger_2["history"]["inner_pts"].append([ii.detach().cpu().numpy() for ii in inner_pts])
+        logger_2["losses"]["E_align"].append(E_align.detach().numpy().tolist())
+        logger_2["losses"][f"E_spen x{sp_coeffs}"].append(E_spen.detach().numpy().tolist())
+        logger_2["losses"][f"E_dist x{dis_coeffs}"].append(E_dis.detach().numpy().tolist())
+        logger_2["losses"][f"E_pen x{pen_coeffs}"].append(E_pen.detach().numpy().tolist())
 
-    filename = f"retarget_wmq/0929vis/stage2_step{total_step}_all_lr{lr}_thres{thres}_spcoeffs{sp_coeffs}_pen{pen_coeffs}_{pen_thres}_dis{dis_coeffs}square_disthres{dis_thres}_{seq_data['which_sequence']}_frame{check_frame}"
+    folder_name = "/home/wangminqi/workspace/test/DexPose/retarget_wmq/Taco_vis"
+    config_name = f"stage2_step{total_step}_all_lr{lr}_thres{thres}_spcoeffs{sp_coeffs}_pen{pen_coeffs}_{pen_thres}_dis{dis_coeffs}square_disthres{dis_thres}"
+    filename = f"uid{seq_data['uid']}_{seq_data['which_sequence']}"
     if logger_2["is_vis"]:
+        os.makedirs(os.path.join(folder_name, config_name, f"vis_frame{check_frame}"), exist_ok=True)
         from utils.wmq import vis_dexhand_optimize
         obj_mesh = get_object_meshes_from_human_data(seq_data)
         obj_mesh_ls = apply_transformation_on_object_mesh(obj_mesh, seq_data['o_transf'][:, check_frame:check_frame+1, :, :])
+        TT = len(logger_2["history"]["hand_mesh"])
         vis_dexhand_optimize(
-            pc_ls=[np.tile(pc_ls[check_frame], (total_step, 1, 1))],
-            object_mesh_ls=[i*total_step for i in obj_mesh_ls],
-            gt_hand_joints=seq_data['h_joints'][check_frame].expand(total_step, -1, -1).cpu().numpy(),
-            hand_mesh_ls=[[i for i in logger_2["history"]["hand_mesh"]]],
-            gt_posi_pts=mano_fingertip[check_frame].expand(total_step, -1, -1).cpu().numpy(),
+            pc_ls=[np.tile(pc_ls[check_frame], (TT, 1, 1))],
+            object_mesh_ls=[i*(TT) for i in obj_mesh_ls],
+            gt_hand_joints=seq_data['h_joints'][check_frame].expand(TT, -1, -1).cpu().numpy(),
+            hand_mesh_ls=[logger_2["history"]["hand_mesh"]],
+            gt_posi_pts=mano_fingertip[check_frame].expand(TT, -1, -1).cpu().numpy(),
             posi_pts_ls=np.stack(logger_2["history"]["robot_keypoints"]),
             contact_pt_ls=np.stack(logger_2["history"]["ct_pts"]),
             corr_contact_pt_ls=np.stack(logger_2["history"]["corr_ct_pts"]),
-            inner_pen_pts=logger_2["history"]["inner_pts"],
+            inner_pen_pts=logger_2["history"]["inner_pts"][check_frame],
             outer_pen_pts=logger_2["history"]["outer_pts"],
-            filename=filename
+            filename=os.path.join(folder_name, config_name, f"vis_frame{check_frame}", filename)
         )
-    if logger_2["is_plot"]:
+    if logger_2['is_plot_optimize']:
+        os.makedirs(os.path.join(folder_name, config_name, 'optim'+'_'.join(map(str, logger_2['optimize_frame_check_ls']))), exist_ok=True)
         from matplotlib import pyplot as plt
-        plt.figure()
-        plt.subplot(1, 2, 1)
-        for key in logger_2["losses"]:
-            plt.plot(np.arange(len(logger_2["losses"][key])), logger_2["losses"][key], label=key)
-        plt.yscale('log')
-        plt.xlabel("Step")
-        plt.ylabel("Loss")
-        plt.legend()
-        plt.subplot(1, 2, 2)
-        inner_num = [len(i) for i in logger_2["history"]["inner_pts"]]
-        plt.plot(np.arange(len(inner_num)), inner_num, label="inner points num")
-        plt.xlabel("Step")
-        plt.ylabel("Num")
-        plt.legend()
-        plt.savefig(f"{filename}.png")
+        fig = plt.figure(figsize=(6 * len(logger_2["optimize_frame_check_ls"]), 5 * 2))
+        gs = fig.add_gridspec(2, len(logger_2["optimize_frame_check_ls"]), hspace=0.3)
+
+        # 上排：loss 曲线
+        for col, ff_n in enumerate(logger_2["optimize_frame_check_ls"]):
+            ax = fig.add_subplot(gs[0, col])
+            for lr in logger_2['losses']:
+                loss_item = np.stack([ii[ff_n] for ii in logger_2['losses'][lr]])
+                ax.plot(np.arange(len(loss_item)), loss_item, label=lr)
+            ax.set_yscale('log')
+            ax.set_xlabel("Step")
+            ax.set_ylabel("Loss")
+            ax.legend()
+            ax.set_title(f"Frame {ff_n}")
+
+        # 下排：inner points 数量
+        for col, ff_n in enumerate(logger_2["optimize_frame_check_ls"]):
+            ax = fig.add_subplot(gs[1, col])
+            inner_cnt = [len(step_ls[ff_n]) for step_ls in logger_2["history"]["inner_pts"]]
+            ax.plot(np.arange(len(inner_cnt)), inner_cnt, label="inner points num")
+            ax.set_xlabel("Step")
+            ax.set_ylabel("Num")
+            ax.legend()
+            ax.set_title(f"Frame {ff_n}")
+
+        plt.savefig(os.path.join(folder_name, config_name, 'optim'+'_'.join(map(str, logger_2['optimize_frame_check_ls'])), filename+'.png'))
+        plt.close()
+    if logger_2["is_plot_timestep"]:
+        os.makedirs(os.path.join(folder_name, config_name, "sequence_losses"), exist_ok=True)
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import to_rgba
+
+        steps   = total_step
+        T       = seq_data['seq_len']
+        plot_iv = logger_2.get('plot_interval', 1)
+        idx_plt = np.arange(0, steps, plot_iv)
+
+        n_loss  = len(logger_2['losses'])
+        fig, axs = plt.subplots(n_loss+1, 1, figsize=(8, 2+2*n_loss), sharex=True)
+
+        cmap = plt.get_cmap('Greys')
+        norm = plt.Normalize(vmin=0, vmax=len(idx_plt)-1)
+
+        for ax_idx, (name, loss_mat) in enumerate(logger_2['losses'].items()):
+            # 左列：loss 随 time-step 变化
+            ax = axs[ax_idx]
+            for j, opt_i in enumerate(idx_plt):
+                color = to_rgba(cmap(norm(j)))
+                ax.plot(range(T), loss_mat[opt_i], color=color,
+                        label=f'step {opt_i}' if j % max(1, len(idx_plt)//5) == 0 else "")
+            ax.set_ylabel(name)
+            ax.set_yscale('log')
+            ax.legend(bbox_to_anchor=(1.02,1), loc='upper left', fontsize=6)
+
+        ax = axs[-1]
+        for j, opt_i in enumerate(idx_plt):
+            color = to_rgba(cmap(norm(j)))
+            cnt_t = [len(time_ls) for time_ls in logger_2["history"]["inner_pts"][opt_i]]
+            ax.plot(range(T), cnt_t, color=color,
+                    label=f'step {opt_i}' if j % max(1, len(idx_plt)//5) == 0 else "")
+        ax.set_ylabel('Inner points num')
+        ax.legend(bbox_to_anchor=(1.02,1), loc='upper left', fontsize=6)
+
+        plt.xlabel('time step')
+        plt.tight_layout()
+        plt.savefig(os.path.join(folder_name, config_name, "sequence_losses", f"{filename}.png"))
         plt.close()
 
     retargeted_seq = dict(            
         which_hand=robot_hand.robot_name,
-        hand_poses=dex_pose,
-        ) + seq_data
+        dex_poses=dex_pose,
+        )
+    retargeted_seq.update(seq_data)
 
     return retargeted_seq, logger_1['losses'], logger_2['losses']
 
 def main_retarget(seq_data_ls, robots):
+    save_path = '/home/wangminqi/workspace/test/data/Taco/dex_save1002/shadow_1.p'
+    if os.path.isfile(save_path): os.remove(save_path)
     processed_data = {}
     for robot_name in robots:
         robot_hand = load_robot(robot_name)
@@ -646,13 +595,21 @@ def main_retarget(seq_data_ls, robots):
         losses_1_all = []
         losses_2_all = []
         for i, seq_data in enumerate(seq_data_ls):
-            print(f"Processing sequence with {robot_name} from {seq_data['which_dataset']} with {seq_data['which_sequence']}")
+            print(f"Sequence {i}: Processing sequence {seq_data['uid']} with {robot_name} from {seq_data['which_dataset']} with {seq_data['which_sequence']}")
+            if seq_data['if_flip']:
+                print(f"SKIP! Sequence {seq_data['uid']}")
+                continue
             retargeted_seq, losses_1, losses_2 = retarget_sequence(seq_data, robot_hand)
             retargeted_data.append(retargeted_seq)
-            # losses_1_all.append(losses_1)
-            # losses_2_all.append(losses_2)
-            with open("/home/wangminqi/workspace/test/DexPose/retarget_wmq/Taco_vis/loss.log", "a") as f:
-                f.write(f"Index {i} {seq_data['which_dataset']} {seq_data['which_sequence']} Stage 2: {[f'{k}: {v[-10:].mean():.4f}' for k, v in losses_2.items()]}\n")
+            losses_1_all.append(losses_1)
+            losses_2_all.append(losses_2)
+            with open(save_path, 'wb') as ofs:
+                joblib.dump(retargeted_data, ofs)
+                from utils.vis_utils import visualize_dex_hand_sequence
+            
+            # os.makedirs('/home/wangminqi/workspace/test/DexPose/retarget_wmq/Taco_vis/seq_vis/',exist_ok=True)
+            # visualize_dex_hand_sequence(retargeted_seq, f"/home/wangminqi/workspace/test/DexPose/retarget_wmq/Taco_vis/seq_vis/{retargeted_seq['uid']}")
+
         processed_data[robot_hand] = retargeted_data
 
         if False:
@@ -688,5 +645,6 @@ if __name__ == "__main__":
     file_path = '/home/wangminqi/workspace/test/data/Taco/human_save0929/seq_mirror_correct_1.p'
     import pickle
     with open(file_path, 'rb') as f:
-        seq_data_ls = pickle.load(f)[8:9]
+        seq_data_ls = pickle.load(f)[0::2]
     processed_data = main_retarget(seq_data_ls, robots)
+
