@@ -1563,7 +1563,7 @@ def vis_grid(seq_data_ls, filename=None):
 import plotly.colors
 
 
-def vis_as_frame(seq_data_ls, filename=None, check_frame_ls=[60], if_render=False):
+def vis_as_frame(seq_data_ls, filename=None, check_frame_ls=[60], if_render=False, img_filename="./dataset/logs/taco_vis/"):
     """
     将多个序列可视化为动画中的连续帧。
 
@@ -1717,7 +1717,7 @@ def vis_as_frame(seq_data_ls, filename=None, check_frame_ls=[60], if_render=Fals
                     title=f"Sequence {iid} {seq_data['which_sequence']}"
                 )
                 os.makedirs(f"./dataset/logs/taco_vis/{check_frame}", exist_ok=True)
-                imgfig.write_image(f"./dataset/logs/taco_vis/{check_frame}/seq_{iid}_{seq_data['which_sequence']}.png")
+                imgfig.write_image(f"{img_filename}/{check_frame}/seq_{iid}_{seq_data['which_sequence']}.png")
 
         # === 3. 创建并组装最终的动画图表 ===
         if not frames:

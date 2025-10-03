@@ -9,7 +9,7 @@ import copy
 from tqdm import tqdm
 from manotorch.manolayer import ManoLayer
 from utils.vis_utils import vis_pc_coor_plotly
-from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate_feature, get_contact_pts, find_longest_false_substring, from_hand_rot6d, to_hand_rot6d, matrix_to_rotation_6d
+from utils.tools import get_key_hand_joints, apply_transformation_pt, intepolate_feature, get_contact_pts, find_longest_false_substring, from_hand_rot6d, to_hand_rot6d, matrix_to_rotation_6d, rotation_6d_to_matrix
 from pytorch3d.transforms import matrix_to_axis_angle, axis_angle_to_matrix, quaternion_to_matrix, matrix_to_quaternion, axis_angle_to_quaternion
 import joblib
 
@@ -17,8 +17,8 @@ WMQ_IS_USING = True
 
 if WMQ_IS_USING:
 
-    data_root = '/home/qianxu/Desktop/Project/DexPose/data'
-    # data_root = '/home/wangminqi/workspace/test/data'
+    # data_root = '/home/qianxu/Desktop/Project/DexPose/data'
+    data_root = '/home/wangminqi/workspace/test/data'
 
     ORIGIN_DATA_PATH = {
         "Taco": os.path.join(data_root, "Taco"),
@@ -141,10 +141,10 @@ class BaseDatasetProcessor(ABC):
         os.makedirs(save_path, exist_ok=True)
         if os.path.isfile(self.seq_save_path): os.remove(self.seq_save_path)
 
-        # self.manolayer_left = ManoLayer(center_idx=0, side='left', use_pca=False, rot_mode='quat', mano_assets_root="/home/wangminqi/workspace/test/packages").cuda()
-        # self.manolayer_right = ManoLayer(center_idx=0, side='right', use_pca=False, rot_mode='quat', mano_assets_root="/home/wangminqi/workspace/test/packages").cuda()
-        self.manolayer_left = ManoLayer(center_idx=0, side='left', use_pca=False, rot_mode='quat').cuda()
-        self.manolayer_right = ManoLayer(center_idx=0, side='right', use_pca=False, rot_mode='quat').cuda()
+        self.manolayer_left = ManoLayer(center_idx=0, side='left', use_pca=False, rot_mode='quat', mano_assets_root="/home/wangminqi/workspace/test/packages").cuda()
+        self.manolayer_right = ManoLayer(center_idx=0, side='right', use_pca=False, rot_mode='quat', mano_assets_root="/home/wangminqi/workspace/test/packages").cuda()
+        # self.manolayer_left = ManoLayer(center_idx=0, side='left', use_pca=False, rot_mode='quat').cuda()
+        # self.manolayer_right = ManoLayer(center_idx=0, side='right', use_pca=False, rot_mode='quat').cuda()
 
         if self.feature_on:
             self.renderer = MeshRenderer3D()
@@ -255,9 +255,6 @@ class BaseDatasetProcessor(ABC):
         hand_tsl_m = data_dict['h_tsl'].clone()
         hand_tsl_m[..., 0] *= -1
 
-        hand_coeffs_m = data_dict['h_coeffs'].clone()
-        hand_coeffs_m[:, :, 1] = -hand_coeffs_m[:, :, 1]
-
         hand_params:torch.Tensor = data_dict['h_params'].clone()
         hand_params[..., -3] *= -1
         hand_rotvec = from_hand_rot6d(hand_params[:, :-3].reshape(hand_params.shape[0], -1, 6), to_rotvec=True)
@@ -265,6 +262,8 @@ class BaseDatasetProcessor(ABC):
         hand_rotvec[..., [1, 2]] *= -1
         hand_rot6d_m = to_hand_rot6d(hand_rotvec, from_rotvec=True)
         hand_params_m = torch.cat((hand_rot6d_m.flatten(-2), hand_params[..., -3:]), dim=-1)
+
+        hand_coeffs_m = matrix_to_quaternion(rotation_6d_to_matrix(hand_rot6d_m.reshape(-1,16,6)))
 
         side_m = 'l' if side == 'r' else 'r'
 
@@ -490,21 +489,21 @@ class BaseDatasetProcessor(ABC):
             'uid': uid,
         }
 
-        ### Debug object transformation ###
-        from utils.wmq import vis_frames_plotly
-        vis_frames_plotly(
-            pc_ls=[apply_transformation_human_data(sequence_data['o_points'], sequence_data['o_transf'])],
-            gt_hand_joints=sequence_data['h_joints'].cpu(),
-            object_mesh_ls=apply_transformation_on_object_mesh(get_object_meshes_from_human_data(sequence_data), sequence_data['o_transf']),
-            show_axis=True,
-            filename=f"/home/qianxu/Desktop/Project/DexPose/dataset/logs/debug/{sequence_data['which_sequence']}_original"
-        )
-        ### Debug object transformation ###
+        # ### Debug object transformation ###
+        # from utils.wmq import vis_frames_plotly
+        # vis_frames_plotly(
+        #     pc_ls=[apply_transformation_human_data(sequence_data['o_points'], sequence_data['o_transf'])],
+        #     gt_hand_joints=sequence_data['h_joints'].cpu(),
+        #     object_mesh_ls=apply_transformation_on_object_mesh(get_object_meshes_from_human_data(sequence_data), sequence_data['o_transf']),
+        #     show_axis=True,
+        #     filename=f"/home/qianxu/Desktop/Project/DexPose/dataset/logs/debug/{sequence_data['which_sequence']}_original"
+        # )
+        # ### Debug object transformation ###
 
         if side == 'l':
             sequence_data = self.mirror_data(sequence_data, side)
         
-        #### DEBUG CODE
+        #### DEBUG CODE (old! really old!)
         # w2c = torch.eye(4).unsqueeze(0)
         # w2c[..., :3, :3] = R_w2v.cpu()
         # w2c[..., :3, 3] = T_w2v.cpu()
@@ -531,20 +530,20 @@ class BaseDatasetProcessor(ABC):
                 gt_hand_joints=sequence_data['h_joints'].cpu(),
                 object_mesh_ls=apply_transformation_on_object_mesh(get_object_meshes_from_human_data(sequence_data), sequence_data['o_transf']),
                 show_axis=True,
-                filename=f"/home/qianxu/Desktop/Project/DexPose/dataset/logs/debug/{sequence_data['which_sequence']}_mirrored"
+                filename=f"/home/wangminqi/workspace/test/DexPose/dataset/logs/debug/{sequence_data['which_sequence']}_hj"
             )
             ### Debug object transformation ###
 
-            # ### Debug hand coeffs ###
-            # from utils.wmq import vis_frames_plotly
-            # from utils.tools import extract_hand_points_and_mesh
-            # vis_frames_plotly(
-            #     pc_ls=[apply_transformation_human_data(sequence_data['o_points'], sequence_data['o_transf'])],
-            #     gt_hand_joints=extract_hand_points_and_mesh(sequence_data["h_tsl"], sequence_data["h_coeffs"], sequence_data["side"])[0],
-            #     object_mesh_ls=apply_transformation_on_object_mesh(get_object_meshes_from_human_data(sequence_data), sequence_data['o_transf']),
-            #     show_axis=True,
-            #     filename="yyy_2"
-            # )
+            ### Debug hand coeffs ###
+            from utils.wmq import vis_frames_plotly
+            from utils.tools import extract_hand_points_and_mesh
+            vis_frames_plotly(
+                pc_ls=[apply_transformation_human_data(sequence_data['o_points'], sequence_data['o_transf'])],
+                gt_hand_joints=extract_hand_points_and_mesh(sequence_data["h_tsl"], sequence_data["h_coeffs"], sequence_data["side"])[0],
+                object_mesh_ls=apply_transformation_on_object_mesh(get_object_meshes_from_human_data(sequence_data), sequence_data['o_transf']),
+                show_axis=True,
+                filename=f"/home/wangminqi/workspace/test/DexPose/dataset/logs/debug/{sequence_data['which_sequence']}_he"
+            )
         
         return sequence_data
 
@@ -565,10 +564,9 @@ class BaseDatasetProcessor(ABC):
             sequence_list = self._load_sequence_data(data_item) 
             
             for seq_data in sequence_list:
-                for side in ['l', 'r']:
+                for side in ['l','r']:
                     if seq_data.get(f'{side}_valid', True):  # Check if this side has valid data
-                        # if uid < 683:
-                        #     continue
+                        
                         print(f"Processing {idx}: {seq_data['which_dataset']}-{seq_data['which_sequence']} on side {side}")
                         processed_seq = self.process_sequence(seq_data, side, uid)
                         if processed_seq is not None: 
@@ -577,6 +575,7 @@ class BaseDatasetProcessor(ABC):
                             
                             with open(self.seq_save_path, 'wb') as ofs:
                                 joblib.dump(whole_data_ls, ofs)
+
                             print("####################")
                             print(f"Processed UID {uid} sequences, {len(whole_data_ls)} saved")
                             print("####################")

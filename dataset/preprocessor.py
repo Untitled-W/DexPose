@@ -310,6 +310,17 @@ class TACOProcessor(BaseDatasetProcessor):
                     elif file_name.startswith("target_"):
                         target_name = file_name.split(".")[0].split("_")[-1]
                         
+                if tool_name is None or target_name is None:
+                    continue
+                
+                # Extract action info
+                verb, tool_real_name, target_real_name = self._extract_action_info(task_name)
+                
+                # Load poses
+                tool_poses = np.load(os.path.join(object_pose_dir, f"tool_{tool_name}.npy"))
+                target_poses = np.load(os.path.join(object_pose_dir, f"target_{target_name}.npy"))
+                n_frames = tool_poses.shape[0]
+                
                 if f'{task_name}-{seq_name}' in [
                     '(pour in some, kettle, bowl)-20231019_001',
                     '(pour in some, kettle, bowl)-20231019_027',
@@ -332,18 +343,9 @@ class TACOProcessor(BaseDatasetProcessor):
                     '(pour in some, kettle, kettle)-20230926_046'
                 ]:
                     tool_name, target_name = target_name, tool_name
-                
-                if tool_name is None or target_name is None:
-                    continue
-                
-                # Extract action info
-                verb, tool_real_name, target_real_name = self._extract_action_info(task_name)
-                
-                # Load poses
-                tool_poses = np.load(os.path.join(object_pose_dir, f"tool_{tool_name}.npy"))
-                target_poses = np.load(os.path.join(object_pose_dir, f"target_{target_name}.npy"))
-                n_frames = tool_poses.shape[0]
-                
+                    tool_poses, target_poses = target_poses, tool_poses
+                    tool_real_name, target_real_name = target_real_name, tool_real_name
+
                 # Create sequences for tool (right hand) and target (left hand)
                 sequences.extend([
                     {
@@ -578,39 +580,7 @@ class DexYCBProcessor(BaseDatasetProcessor):
 
         return [obj_poses_transformed], [object_names], [mesh_path]
 
-
-# Dataset configurations
-DATASET_CONFIGS = {
-    'oakinkv2': {
-        'processor_name': 'oakinkv2',
-        'root_path': ORIGIN_DATA_PATH['Oakinkv2'],
-        'save_path': HUMAN_SEQ_PATH['Oakinkv2'],
-        'task_interval': 20,
-        'which_dataset': 'Oakinkv2',
-        'seq_data_name': 'feature',
-        'sequence_indices': None
-    },
-    
-    'taco': {
-        'processor_name': 'taco',
-        'root_path': ORIGIN_DATA_PATH['Taco'],
-        'save_path': HUMAN_SEQ_PATH['Taco'],
-        'task_interval': 1,
-        'which_dataset': 'Taco',
-        'seq_data_name': 'feature',
-        'sequence_indices': None
-    },
-
-    'dexycb': {
-        'processor_name': 'dexycb',
-        'root_path': ORIGIN_DATA_PATH['DexYCB'],
-        'save_path': HUMAN_SEQ_PATH['DexYCB'],
-        'task_interval': 1,
-        'which_dataset': 'DexYCB',
-        'seq_data_name': 'feature',
-        'sequence_indices': None
-    }
-}
+DATASET_CONFIGS = {}
 
 def setup_logging(level=logging.INFO):
     """Setup logging configuration."""
@@ -801,8 +771,41 @@ def check_data_correctness_by_vis(human_data: List[HumanSequenceData]):
         # for (d, idx) in sampled_data:
         #     visualize_human_sequence(d, f'/home/wangminqi/workspace/test/DexPose/dataset/logs/({idx})_{d["which_dataset"]}_{d["which_sequence"]}_{d["side"]}')
         # vis_as_frame(data_list[:5], f'/home/wangminqi/workspace/test/DexPose/dataset/logs/{dataset_name}_human', [0, 30, 60])
+        
         vis_as_frame(data_list, f'/home/qianxu/Desktop/Project/DexPose/dataset/logs/{dataset_name}_human', check_frame_ls=[60], if_render=True)
 
+# Dataset configurations
+DATASET_CONFIGS = {
+    'oakinkv2': {
+        'processor_name': 'oakinkv2',
+        'root_path': ORIGIN_DATA_PATH['Oakinkv2'],
+        'save_path': HUMAN_SEQ_PATH['Oakinkv2'],
+        'task_interval': 20,
+        'which_dataset': 'Oakinkv2',
+        'seq_data_name': 'feature',
+        'sequence_indices': None
+    },
+    
+    'taco': {
+        'processor_name': 'taco',
+        'root_path': ORIGIN_DATA_PATH['Taco'],
+        'save_path': HUMAN_SEQ_PATH['Taco'],
+        'task_interval': 1,
+        'which_dataset': 'Taco',
+        'seq_data_name': 'feature',
+        'sequence_indices': None
+    },
+
+    'dexycb': {
+        'processor_name': 'dexycb',
+        'root_path': ORIGIN_DATA_PATH['DexYCB'],
+        'save_path': HUMAN_SEQ_PATH['DexYCB'],
+        'task_interval': 1,
+        'which_dataset': 'DexYCB',
+        'seq_data_name': 'feature',
+        'sequence_indices': None
+    }
+}
 
 if __name__ == "__main__":
 
@@ -815,7 +818,7 @@ if __name__ == "__main__":
     GENERATE = True
     if GENERATE:
         setup_logging()
-        processed_data = process_multiple_datasets(dataset_names, [{'sequence_indices': [59,60], 'seq_data_name': 'debug4'}])
+        processed_data = process_multiple_datasets(dataset_names, [{'sequence_indices': [0], 'seq_data_name': 'debug_left'}])
         # processed_data = process_multiple_datasets(dataset_names, [{'seq_data_name': 'mirror_correct'}])
 
     else:
@@ -823,8 +826,8 @@ if __name__ == "__main__":
             file_path = os.path.join(DATASET_CONFIGS[dataset_name]['save_path'],'seq_mirror_correct_1.p')
             with open(file_path, 'rb') as f:
                 data = pickle.load(f)
-            for i in range(len(data)):
-                data[i]['object_mesh_path'] = [ii.replace('/home/wangminqi/workspace/test/data', '/home/qianxu/Desktop/Project/DexPose/data') for ii in data[i]['object_mesh_path']]
+            # for i in range(len(data)):
+            #     data[i]['object_mesh_path'] = [ii.replace('/home/wangminqi/workspace/test/data', '/home/qianxu/Desktop/Project/DexPose/data') for ii in data[i]['object_mesh_path']]
             processed_data.extend(data)
 
         # show_human_statistics(processed_data)

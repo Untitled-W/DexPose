@@ -63,6 +63,8 @@ def matrix_to_rotation_6d(matrix: torch.Tensor) -> torch.Tensor:
     batch_dim = matrix.size()[:-2]
     return matrix[..., :2, :].clone().reshape(batch_dim + (6,))
 
+
+
 def from_hand_rot6d(h_coeffs_rot6d, to_rotvec:bool=False):
     h_coeffs_ = matrix_to_quaternion(rotation_6d_to_matrix(h_coeffs_rot6d))
     if to_rotvec:
@@ -673,9 +675,11 @@ def extract_hand_points_and_mesh(hand_tsls, hand_coeffs, side):
 
     if CENTER:
         if side == 0:
-            mano_layer = ManoLayer(center_idx=0, side='left', use_pca=False).cuda()
+            # mano_layer = ManoLayer(center_idx=0, side='left', use_pca=False).cuda()
+            mano_layer = ManoLayer(center_idx=0, side='left', use_pca=False, mano_assets_root="/home/wangminqi/workspace/test/packages").cuda()
         else:
-            mano_layer = ManoLayer(center_idx=0, side='right', use_pca=False).cuda()
+            # mano_layer = ManoLayer(center_idx=0, side='right, use_pca=False).cuda()
+            mano_layer = ManoLayer(center_idx=0, side='right', use_pca=False, mano_assets_root="/home/wangminqi/workspace/test/packages").cuda()
     else:
         if side == 0:
             mano_layer = ManoLayer(side='left', use_pca=False).cuda()
