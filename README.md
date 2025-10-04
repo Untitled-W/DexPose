@@ -48,12 +48,12 @@ cd thirdparty/pytorch3d; rm -rf build/ **\*.so; pip install .; cd -
         1.using `vis_frames_plotly`(utils.wmq)
     2. render 60th frame per sequence (in ``)
         1. using `vis_as_frame`(utils.vis_utils)
-
+(change two places: DATASET_CONFIG + ManoLayer)
 
 ### (2) retarget
 
 `retarget.optim_aughoi`
-1. set `file_path` (the file: a list, each element a dict); save dexhand sequence (in `main_retarget`)
+1. set `file_path` (the file: a list, each element a dict); set `save_path` (save dexhand sequence in `main_retarget`)
 2. visualization options:
     1. 3D optimization process at one frame (in `retarget_sequence`)
         1. using: `vis_frames_plotly`(utils.wmq) and `vis_dexhand_optimize_stage2`(utils.wmq)

@@ -57,7 +57,7 @@ def retarget_sequence_batch(seq_data, robot_hand: HandRobotWrapper):
     init_hand_aa = quat_to_aa_wmq(init_hand_quat)
     dex_pose[:, 3:6] = init_hand_aa.clone()
     robot_hand.compute_forward_kinematics(dex_pose)
-    dex_pose[:, :3] = (init_hand_tsl - robot_hand.get_joint_world_coordinates_dict()["WRJ1"]).clone()
+    dex_pose[:, :3] = (init_hand_tsl - robot_hand.get_wrist()).clone()
     dex_pose.requires_grad_(True)
     
     # Init robot hand pose (all joints align)
@@ -326,7 +326,7 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
     init_hand_aa = quat_to_aa_wmq(init_hand_quat)
     dex_pose[:, 3:6] = init_hand_aa.clone()
     robot_hand.compute_forward_kinematics(dex_pose)
-    dex_pose[:, :3] = (init_hand_tsl - robot_hand.get_joint_world_coordinates_dict()["WRJ1"]).clone()
+    dex_pose[:, :3] = (init_hand_tsl - robot_hand.get_wrist()).clone()
     dex_pose.requires_grad_(True)
     
     # Init robot hand pose (all joints align)

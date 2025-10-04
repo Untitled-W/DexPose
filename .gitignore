@@ -4,6 +4,7 @@ vis_results
 *_old
 wandb
 tmp
+vis_*
 
 0912_ignore
 0929vis

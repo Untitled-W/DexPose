@@ -433,8 +433,12 @@ def get_vis_hand_keypoints_with_color_gradient_and_lines(
 def visualize_hand_and_joints(
     mano_joint: np.array = None, 
     robot_keypoints: Dict[str, torch.Tensor] = None,
-    robot_hand_mesh: o3d.geometry.TriangleMesh = None,
+    # robot_hand_mesh: o3d.geometry.TriangleMesh = None,
+    robot_link_mesh: Dict[str, o3d.geometry.TriangleMesh] = None,
+    robot_approx_mesh: Dict[str, o3d.geometry.TriangleMesh] = None,
     human_keypoints: np.array = None,
+    contact_points: np.array = None,
+    penetration_keypoints: np.array = None,
     filename: str = None
 ):
     """
@@ -444,16 +448,16 @@ def visualize_hand_and_joints(
     """
     data_traces = []
 
-    # --- 1. Add Robot Hand Mesh ---
-    if robot_hand_mesh is not None:
-        verts = np.asarray(robot_hand_mesh.vertices)
-        faces = np.asarray(robot_hand_mesh.triangles)
-        mesh_trace = go.Mesh3d(
-            x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
-            i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
-            color='lightgrey', opacity=0.5, name="Robot Hand Mesh"
-        )
-        data_traces.append(mesh_trace)
+    # # --- 1. Add Robot Hand Mesh ---
+    # if robot_hand_mesh is not None:
+    #     verts = np.asarray(robot_hand_mesh.vertices)
+    #     faces = np.asarray(robot_hand_mesh.triangles)
+    #     mesh_trace = go.Mesh3d(
+    #         x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
+    #         i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
+    #         color='lightgrey', opacity=0.5, name="Robot Hand Mesh"
+    #     )
+    #     data_traces.append(mesh_trace)
 
     # --- 2. Add Labeled MANO Joint Points ---
     if mano_joint is not None:
@@ -462,11 +466,24 @@ def visualize_hand_and_joints(
             point = mano_np[i]
             trace = go.Scatter3d(
                 x=[point[0]], y=[point[1]], z=[point[2]],
-                mode='markers+text', marker=dict(size=8, color='red', symbol='circle'),
-                text=[str(i)], textfont=dict(color='darkred', size=20),
+                mode='markers+text', marker=dict(size=4, color='red', symbol='circle'),
+                text=[str(i)], textfont=dict(color='darkred', size=10),
                 name=f"MANO Joint {i}"
             )
             data_traces.append(trace)
+    if contact_points is not None:
+        data_traces.append(go.Scatter3d(x=contact_points[:, 0], y=contact_points[:, 1], z=contact_points[:, 2],
+                        mode="markers", marker=dict(size=1, color="orange"), 
+                        name="Contact Points (Robot)"))
+    if penetration_keypoints is not None and penetration_keypoints.shape[0] > 0:
+        data_traces.append(go.Scatter3d(
+            x=penetration_keypoints[:, 0],
+            y=penetration_keypoints[:, 1],
+            z=penetration_keypoints[:, 2],
+            mode="markers",
+            marker=dict(size=3, color="#ACC313"),
+            name="Penetration Keypoints"
+        ))
 
     # --- 3. Add Labeled Robot Joint Points ---
     if robot_keypoints is not None:
@@ -474,9 +491,9 @@ def visualize_hand_and_joints(
             point = point_tensor.squeeze().detach().cpu().numpy()
             trace = go.Scatter3d(
                 x=[point[0]], y=[point[1]], z=[point[2]],
-                mode='markers+text', marker=dict(size=7, color='blue', symbol='diamond'),
-                text=[str(i)], textfont=dict(color='darkblue', size=20),
-                name=f"Robot {i} ({joint_name})"
+                mode='markers+text', marker=dict(size=4, color='blue', symbol='diamond'),
+                text=[str(i)], textfont=dict(color='darkblue', size=10),
+                name=f"Robot Joint {i} ({joint_name})"
             )
             data_traces.append(trace)
 
@@ -494,7 +511,29 @@ def visualize_hand_and_joints(
         # Add all the generated traces to our main data list
         data_traces.extend(skeleton_traces)
         
-    # --- 5. Create and show/save the figure ---
+    # --- 5. Add Robot Link Mesh ---
+    if robot_link_mesh is not None:
+        for i, (link_name, link_mesh) in enumerate(robot_link_mesh.items()):
+            verts = np.asarray(link_mesh.vertices)
+            faces = np.asarray(link_mesh.triangles)
+            mesh_trace = go.Mesh3d(
+                x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
+                i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
+                color='lightgrey', opacity=0.8, name=f"Robot Link {i} ({link_name})", showlegend=True
+            )
+            data_traces.append(mesh_trace)
+    if robot_approx_mesh is not None:
+        for i, (link_name, link_mesh) in enumerate(robot_approx_mesh.items()):
+            verts = np.asarray(link_mesh.vertices)
+            faces = np.asarray(link_mesh.triangles)
+            mesh_trace = go.Mesh3d(
+                x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
+                i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
+                color='#9DEBEB', opacity=0.4, name=f"Robot Link {i} ({link_name})", showlegend=True
+            )
+            data_traces.append(mesh_trace)
+
+    # --- 6. Create and show/save the figure ---
     fig = go.Figure(data=data_traces)
     fig.update_layout(
         title="MANO vs. Robot Joint and Mesh Comparison",

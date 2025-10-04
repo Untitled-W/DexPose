@@ -443,9 +443,7 @@ class HandRobotWrapper:
 
     def __init__(self, robot_name: str, urdf_path: str, mesh_path: str, device=None,
                  n_surface_points=2000,
-                 penetration_points_path='./retarget_wmq/mjcf/penetration_points.json',
-                 contact_points_path='./retarget_wmq/mjcf/contact_points.json',
-                 fingertip_points_path='./retarget_wmq/mjcf/fingertip.json',
+                 json_root='./retarget_wmq/mjcf/',
                  tip_aug=None):
         """
         初始化函数
@@ -460,7 +458,7 @@ class HandRobotWrapper:
             PyTorch 张量所使用的设备
         n_surface_points: int
             从手部表面采样的总点数
-        penetration_points_path, contact_points_path, fingertip_points_path: str
+        json_path: str
             指向预定义关键点JSON文件的路径
         tip_aug: float, optional
             增加指尖区域采样权重的增强因子
@@ -489,10 +487,52 @@ class HandRobotWrapper:
         # ---------------------------------------------------------------------- #
         # 3. 加载接触点/关键点 JSON 文件 (来自 HandModelMJCF)
         # ---------------------------------------------------------------------- #
-        # TODO Fix later. Make these paths configurable.
-        contact_points = json.load(open(contact_points_path, 'r')) if contact_points_path is not None else None
-        penetration_points = json.load(open(penetration_points_path, 'r')) if penetration_points_path is not None else None
-        fingertip_points = json.load(open(fingertip_points_path, "r")) if fingertip_points_path is not None else None
+        
+        self.wrist_name = {
+            "shadow_hand": "WJR1",
+            "schunk_hand": "dummy_x_translation_link",
+            "inspire_hand": "dummy_x_translation_link",
+            "allegro_hand": "dummy_x_translation_link",
+        }[self.robot_name]
+
+        self.tip_names = {
+            "shadow_hand": ["thdistal","ffdistal","mfdistal","rfdistal","lfdistal",],
+            "schunk_hand": ["right_hand_c","right_hand_t","right_hand_s","right_hand_r","right_hand_q",],
+            "inspire_hand":["thumb_distal","index_intermediate","middle_intermediate","ring_intermediate","pinky_intermediate",],
+            "allegro_hand": ["link_3.0_tip","link_7.0_tip","link_11.0_tip","link_15.0_tip"],
+        }[self.robot_name]
+        
+        contact_points_path=os.path.join(json_root,robot_name,'contact_points.json')
+        fingertip_points_path=os.path.join(json_root,robot_name,'fingertip.json')
+
+        contact_points = json.load(open(contact_points_path, 'r'))
+        fingertip_points = json.load(open(fingertip_points_path, "r"))
+
+        self.link_approx_names = {
+            "shadow_hand": [
+                "thproximal", "thmiddle", "thdistal",
+                "ffproximal", "ffmiddle", "ffdistal",
+                "mfproximal", "mfmiddle", "mfdistal",
+                "rfproximal", "rfmiddle", "rfdistal",
+                "lfproximal", "lfmiddle", "lfdistal",
+                ],
+            "schunk_hand": [
+                "right_hand_a","right_hand_b","right_hand_c",
+                "right_hand_l","right_hand_p","right_hand_t",
+                "right_hand_k","right_hand_o","right_hand_s",
+                "right_hand_j","right_hand_n","right_hand_r",
+                "right_hand_i","right_hand_m","right_hand_q",
+            ],
+            "inspire_hand": [
+                "thumb_proximal",  "thumb_distal",
+                "index_proximal", "index_intermediate",
+                "middle_proximal", "middle_intermediate",
+                "ring_proximal", "ring_intermediate",
+                "pinky_proximal", "pinky_intermediate",
+            ],
+            "allegro_hand": ["link_14.0", "link_15.0", "link_1.0", "link_2.0", "link_5.0", "link_6.0", "link_9.0", "link_10.0"],
+
+        }[self.robot_name]
 
         # ---------------------------------------------------------------------- #
         # 4. 递归构建网格和处理关键点 (来自 HandModelMJCF)
@@ -544,21 +584,19 @@ class HandRobotWrapper:
                 
                 # 为没有在JSON中定义的link创建空列表
                 if link_name not in contact_points: contact_points[link_name] = []
-                if link_name not in penetration_points: penetration_points[link_name] = []
                 if link_name not in fingertip_points: fingertip_points[link_name] = []
 
                 self.mesh[link_name] = {
                     'vertices': link_vertices,
                     'faces': link_faces,
                     'contact_candidates': torch.tensor(contact_points[link_name], dtype=torch.float32, device=self.device).reshape(-1, 3),
-                    'penetration_keypoints': torch.tensor(penetration_points[link_name], dtype=torch.float32, device=self.device).reshape(-1, 3),
                     'fingertip_keypoints': torch.tensor(fingertip_points[link_name], dtype=torch.float32, device=self.device).reshape(-1, 3),
                 }
 
                 self.mesh[link_name]['face_verts'] = index_vertices_by_faces(link_vertices, link_faces)
                 areas[link_name] = trimesh.Trimesh(link_vertices.cpu().numpy(), link_faces.cpu().numpy()).area.item()
 
-                if link_name.endswith("distal") or link_name.endswith("proximal") or link_name.endswith("middle"):
+                if link_name in self.link_approx_names:
                     # --- APPROXIMATE FINGER USING A CAPSULE ---
                     # print(f"Approximating finger link '{link_name}' with a capsule.")
                     capsule_params = fit_capsule_to_points(link_vertices)
@@ -568,6 +606,8 @@ class HandRobotWrapper:
                     self.mesh[link_name]['c_faces'] = c_faces
                     self.mesh[link_name]['c_face_verts'] = index_vertices_by_faces(c_verts, c_faces)
                     self.mesh[link_name]['capsule_params'] = capsule_params
+                    p1, p2 = capsule_params['start'], capsule_params['end']
+                    self.mesh[link_name]['penetration_keypoints'] = (p1+p2)/2
 
             for children in body.children:
                 build_mesh_recurse(children)
@@ -627,13 +667,6 @@ class HandRobotWrapper:
         self.global_index_to_link_index = torch.tensor(
             sum([[i] * len(p) for i, p in enumerate(contact_candidates_list)], []), dtype=torch.long, device=self.device)
         self.contact_candidates = torch.cat(contact_candidates_list, dim=0)
-        self.n_contact_candidates = self.contact_candidates.shape[0]
-
-        penetration_keypoints_list = [self.mesh[link_name]['penetration_keypoints'] for link_name in self.mesh]
-        self.global_index_to_link_index_penetration = torch.tensor(
-            sum([[i] * len(p) for i, p in enumerate(penetration_keypoints_list)], []), dtype=torch.long, device=self.device)
-        self.penetration_keypoints = torch.cat(penetration_keypoints_list, dim=0)
-        self.n_keypoints = self.penetration_keypoints.shape[0]
 
         # self.sdf = pv.RobotSDF(self.chain, path_prefix=mesh_path)
 
@@ -763,7 +796,7 @@ class HandRobotWrapper:
     #       Point Queries                      #
     # ---------------------------------------- #
 
-    def get_joint_world_coordinates_dict(self) -> Dict[str, torch.Tensor]:
+    def get_joint_world_coordinates_dict(self, add_tips=True) -> Dict[str, torch.Tensor]:
         """
         Computes the world coordinates of all non-fixed joints after forward kinematics.
 
@@ -809,9 +842,10 @@ class HandRobotWrapper:
         # Start the traversal from the root of the chain
         traverse_chain(self.chain._root)
 
-        tips = self.get_tip_points().detach().cpu()
-        for ii, name in enumerate(["THJ0", "FFJ0", "MFJ0", "RFJ0", "LFJ0"]):
-            joint_coords[name] = tips[..., ii, :]  # Add batch dimension
+        if add_tips:
+            tips = self.get_tip_points().detach().cpu()
+            for ii, name in enumerate(self.tip_names):
+                joint_coords[name] = tips[..., ii, :]  # Add batch dimension
 
         return joint_coords
 
@@ -869,23 +903,21 @@ class HandRobotWrapper:
         ]
         return torch.cat(points, dim=-2)
 
-    def get_align_points(self):
+    def get_tip_points(self):
         """
         Get aligned points.
 
         Returns
         -------
-        points: (`batch_size`, `n_aligned_points`, 3)
+        points: (`batch_size`, `n_tip_points`, 3)
             aligned points
         """
+
         points = [
             self.current_status[link_name].transform_points(self.mesh[link_name]['fingertip_keypoints'])
-            for link_name in self.mesh if self.mesh[link_name]['fingertip_keypoints'].shape[0] > 0
+            for link_name in self.tip_names
         ]
         return torch.cat(points, dim=-2)
-
-    def get_tip_points(self):
-        return self.get_align_points()[..., [8, 1, 3, 5, 7], :]
 
     def get_penetration_keypoints(self):
         """
@@ -898,7 +930,7 @@ class HandRobotWrapper:
         """
         points = [
             self.current_status[link_name].transform_points(self.mesh[link_name]['penetration_keypoints'])
-            for link_name in self.mesh if self.mesh[link_name]['penetration_keypoints'].shape[0] > 0
+            for link_name in self.link_approx_names
         ]
         return torch.cat(points, dim=-2)
 
@@ -917,6 +949,8 @@ class HandRobotWrapper:
         ]
         return torch.cat(points, dim=-2)
 
+    def get_wrist(self):
+        return self.get_joint_world_coordinates_dict()[self.wrist_name]
 
     # ------------------------------------------ #
     #       Energy Queries                       #
