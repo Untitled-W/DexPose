@@ -529,7 +529,7 @@ def visualize_hand_and_joints(
             mesh_trace = go.Mesh3d(
                 x=verts[:, 0], y=verts[:, 1], z=verts[:, 2],
                 i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
-                color='#9DEBEB', opacity=0.4, name=f"Robot Link {i} ({link_name})", showlegend=True
+                color='#9DEBEB', opacity=0.2, name=f"Robot Link {i} ({link_name})", showlegend=True
             )
             data_traces.append(mesh_trace)
 

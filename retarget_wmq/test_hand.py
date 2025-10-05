@@ -37,10 +37,10 @@ def quat_to_aa_wmq(quat, side='right'):
     euler = matrix_to_euler_angles(quaternion_to_matrix(quat) @ operator2mano[side], 'XYZ')
     return euler
 
-# robot_name = "shadow_hand"
+robot_name = "shadow_hand"
 # robot_name = 'inspire_hand'
 # robot_name = 'leap_hand'
-robot_name = 'allegro_hand'
+# robot_name = 'allegro_hand'
 # robot_name = 'schunk_hand'
 
 robot_hand = load_robot(robot_name)  # type: HandRobotWrapper
