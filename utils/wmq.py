@@ -438,6 +438,7 @@ def visualize_hand_and_joints(
     robot_approx_mesh: Dict[str, o3d.geometry.TriangleMesh] = None,
     human_keypoints: np.array = None,
     contact_points: np.array = None,
+    surface_points: np.array = None,
     penetration_keypoints: np.array = None,
     filename: str = None
 ):
@@ -447,6 +448,27 @@ def visualize_hand_and_joints(
     to render the human skeleton.
     """
     data_traces = []
+
+    IF_PC = True # 您可以通过修改此宏来控制整体尺寸缩放
+
+    # 根据 IF_PC 决定缩放因子
+    scale_factor = 1/3 if IF_PC else 1
+
+    # 定义所有绘图相关的基础尺寸属性（未缩放的原始值）
+    drawing_sizes_base = {
+        'mano_joints': 12,
+        'contact_points': 3,
+        'penetration_keypoints': 9,
+        'surface_points': 3,
+        'robot_keypoints': 12,
+    }
+    drawing_sizes = {}
+    for k, v in drawing_sizes_base.items():
+        # 'voxel_selected_opacity' 是透明度，不应该被 scale_factor 影响
+        if isinstance(v, (int, float)) and k != "voxel_selected_opacity":
+            drawing_sizes[k] = v * scale_factor
+        else:
+            drawing_sizes[k] = v
 
     # # --- 1. Add Robot Hand Mesh ---
     # if robot_hand_mesh is not None:
@@ -466,22 +488,26 @@ def visualize_hand_and_joints(
             point = mano_np[i]
             trace = go.Scatter3d(
                 x=[point[0]], y=[point[1]], z=[point[2]],
-                mode='markers+text', marker=dict(size=4, color='red', symbol='circle'),
+                mode='markers+text', marker=dict(size=drawing_sizes['mano_joints'], color='red', symbol='circle'),
                 text=[str(i)], textfont=dict(color='darkred', size=10),
                 name=f"MANO Joint {i}"
             )
             data_traces.append(trace)
     if contact_points is not None:
         data_traces.append(go.Scatter3d(x=contact_points[:, 0], y=contact_points[:, 1], z=contact_points[:, 2],
-                        mode="markers", marker=dict(size=1, color="orange"), 
+                        mode="markers", marker=dict(size=drawing_sizes['contact_points'], color="orange"), 
                         name="Contact Points (Robot)"))
+    if surface_points is not None:
+        data_traces.append(go.Scatter3d(x=surface_points[:, 0], y=surface_points[:, 1], z=surface_points[:, 2],
+                        mode="markers", marker=dict(size=drawing_sizes['surface_points'], color="purple"), 
+                        name="Surface Points (Robot)"))
     if penetration_keypoints is not None and penetration_keypoints.shape[0] > 0:
         data_traces.append(go.Scatter3d(
             x=penetration_keypoints[:, 0],
             y=penetration_keypoints[:, 1],
             z=penetration_keypoints[:, 2],
             mode="markers",
-            marker=dict(size=3, color="#ACC313"),
+            marker=dict(size=drawing_sizes['penetration_keypoints'], color="#ACC313"),
             name="Penetration Keypoints"
         ))
 
@@ -491,7 +517,7 @@ def visualize_hand_and_joints(
             point = point_tensor.squeeze().detach().cpu().numpy()
             trace = go.Scatter3d(
                 x=[point[0]], y=[point[1]], z=[point[2]],
-                mode='markers+text', marker=dict(size=4, color='blue', symbol='diamond'),
+                mode='markers+text', marker=dict(size=drawing_sizes['robot_keypoints'], color='blue', symbol='diamond'),
                 text=[str(i)], textfont=dict(color='darkblue', size=10),
                 name=f"Robot Joint {i} ({joint_name})"
             )
