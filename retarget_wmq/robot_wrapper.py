@@ -628,10 +628,10 @@ class HandRobotWrapper:
         
         self.wrist_name = {
             "shadow_hand": "WJR1",
-            "schunk_hand": "dummy_x_translation_link",
-            "inspire_hand": "dummy_x_translation_link",
-            "allegro_hand": "dummy_x_translation_link",
-            "leap_hand": "dummy_x_translation_link",
+            "schunk_hand": "dummy_x_translation_joint",
+            "inspire_hand": "dummy_x_translation_joint",
+            "allegro_hand": "dummy_x_translation_joint",
+            "leap_hand": "dummy_x_translation_joint",
         }[self.robot_name]
 
         self.tip_names = {
@@ -641,6 +641,55 @@ class HandRobotWrapper:
             "allegro_hand": ["link_3.0_tip","link_7.0_tip","link_11.0_tip","link_15.0_tip"],
         }[self.robot_name]
         
+        self.joint_names_mano_order = {
+            # "shadow_hand": ["WRJ1","THJ4","THJ2","THJ1","THJ0","FFJ3","FFJ2","FFJ1","FFJ0","MFJ3","MFJ2","MFJ1","MFJ0","RFJ3","RFJ2","RFJ1","RFJ0","LFJ3","LFJ2","LFJ1","LFJ0"],
+            "shadow_hand": [
+                7, 26, 28, 29, 30, 
+                8, 10, 11, 31, 
+                12, 14, 15, 32, 
+                17, 18, 19, 33, 
+                22, 23, 24, 34
+            ],
+            "schunk_hand": [
+                0, 7, 8, 9, 26, 
+                20, 21, 22, 27, 
+                23, 24, 25, 28, 
+                12, 13, 14, 29, 
+                16, 17, 18, 30
+            ],
+            "inspire_hand": [
+                0, 7, 8, 18,
+                10, 11, 19,
+                12, 13, 20,
+                14, 15, 21,
+                16, 17, 22,
+            ],
+            "allegro_hand": [
+                0, 19, 21, 25,
+                6, 8, 9, 22,
+                10, 12, 13, 23,
+                14, 16, 17, 24,
+            ]
+        }[self.robot_name]
+
+        self.human_keypoints_order = {
+            "shadow_hand": list(range(21)),
+            "schunk_hand": list(range(21)),
+            "inspire_hand": [
+                0, 1, 3, 4,
+                5, 6, 8,
+                9, 10, 12,
+                13, 14, 16,
+                17, 18, 20,
+            ],
+            "allegro_hand":[
+                0, 1, 3, 4,
+                5, 6, 7, 8,
+                9, 10, 11, 12,
+                17, 18, 19, 20,
+            ]
+        }[self.robot_name]
+
         contact_points_path=os.path.join(json_root,robot_name,'contact_points.json')
         fingertip_points_path=os.path.join(json_root,robot_name,'fingertip.json')
         approx_params_path=os.path.join(json_root,robot_name,'approx_params.json')
@@ -1008,34 +1057,14 @@ class HandRobotWrapper:
         points: (`batch_size`, 21, 3)
             all joints in MANO order
         """
-        joint_names_mano_order = [
-            "WRJ1",
-            "THJ4",
-            "THJ2",
-            "THJ1",
-            "THJ0",
-            "FFJ3",
-            "FFJ2",
-            "FFJ1",
-            "FFJ0",
-            "MFJ3",
-            "MFJ2",
-            "MFJ1",
-            "MFJ0",
-            "RFJ3",
-            "RFJ2",
-            "RFJ1",
-            "RFJ0",
-            "LFJ3",
-            "LFJ2",
-            "LFJ1",
-            "LFJ0",
-        ]
-        points = []
-        joints_dict = self.get_joint_world_coordinates_dict()
-        for joint_name in joint_names_mano_order:
-            points.append(joints_dict[joint_name])
-        points = torch.stack(points, dim=-2)
+
+        # points = []
+        # joints_dict = self.get_joint_world_coordinates_dict()
+        # for joint_name in self.joint_names_mano_order:
+        #     points.append(joints_dict[joint_name])
+        # points = torch.stack(points, dim=-2)
+        joint_list = list(self.get_joint_world_coordinates_dict().values())
+        points = torch.stack([joint_list[ii] for ii in self.joint_names_mano_order], dim=-2)
         return points
 
     def get_surface_points(self):
@@ -1180,7 +1209,7 @@ class HandRobotWrapper:
         # 此时，矩阵的对角线（点与自身的距离为0）会产生 `threshold` 的惩罚值，这是不正确的。
         # 同时，(i, j) 和 (j, i) 的惩罚被计算了两次。
         # 通过只对上三角部分（不含对角线）求和，可以完美解决这两个问题。
-        total_energy = torch.triu(penetration_penalty, diagonal=1).mean()
+        total_energy = torch.triu(penetration_penalty, diagonal=1).mean((-2,-1))
 
         return total_energy
 
@@ -1364,8 +1393,7 @@ class HandRobotWrapper:
         batch_size = obj_points_tensor.shape[0]
         per_link_sdf_list = []
         
-        names = [link_name for link_name in self.mesh if link_name.endswith("distal") or link_name.endswith("proximal") or link_name.endswith("middle")]
-        for link_name in names:
+        for link_name in self.link_approx_names:
 
             link_data = self.mesh[link_name]
             obj_points_local_tensor = self.current_status[link_name].inverse().transform_points(obj_points_tensor)
@@ -1374,12 +1402,7 @@ class HandRobotWrapper:
             per_link_sdf_list.append(-signed_dist)
 
         if not per_link_sdf_list:
-            energy = torch.tensor(0.0, device=self.device)
-            if return_penetrating_points:
-                # Return an empty tensor with correct shape if no points are penetrating
-                empty_points = torch.empty(batch_size, 0, 3, device=self.device)
-                return energy, empty_points if is_batched else empty_points.squeeze(0)
-            return energy
+            raise "No SDF!!!"
 
         # all_sdfs shape: (num_links, B, num_obj_points)
         all_sdfs = torch.stack(per_link_sdf_list, dim=0)

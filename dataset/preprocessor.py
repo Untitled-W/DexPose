@@ -818,8 +818,8 @@ if __name__ == "__main__":
     GENERATE = True
     if GENERATE:
         setup_logging()
-        processed_data = process_multiple_datasets(dataset_names, [{'sequence_indices': [0], 'seq_data_name': 'debug_left'}])
-        # processed_data = process_multiple_datasets(dataset_names, [{'seq_data_name': 'mirror_correct'}])
+        # processed_data = process_multiple_datasets(dataset_names, [{'sequence_indices': [0], 'seq_data_name': 'debug_left'}])
+        processed_data = process_multiple_datasets(dataset_names, [{'seq_data_name': 'final'}])
 
     else:
         for dataset_name in dataset_names:

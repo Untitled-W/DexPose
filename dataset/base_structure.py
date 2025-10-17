@@ -503,6 +503,28 @@ class BaseDatasetProcessor(ABC):
         if side == 'l':
             sequence_data = self.mirror_data(sequence_data, side)
         
+            # ### Debug object transformation ###
+            # from utils.wmq import vis_frames_plotly
+            # vis_frames_plotly(
+            #     pc_ls=[apply_transformation_human_data(sequence_data['o_points'], sequence_data['o_transf'])],
+            #     gt_hand_joints=sequence_data['h_joints'].cpu(),
+            #     object_mesh_ls=apply_transformation_on_object_mesh(get_object_meshes_from_human_data(sequence_data), sequence_data['o_transf']),
+            #     show_axis=True,
+            #     filename=f"/home/wangminqi/workspace/test/DexPose/dataset/logs/debug/{sequence_data['which_sequence']}_hj"
+            # )
+            # ### Debug object transformation ###
+
+            # ### Debug hand coeffs ###
+            # from utils.wmq import vis_frames_plotly
+            # from utils.tools import extract_hand_points_and_mesh
+            # vis_frames_plotly(
+            #     pc_ls=[apply_transformation_human_data(sequence_data['o_points'], sequence_data['o_transf'])],
+            #     gt_hand_joints=extract_hand_points_and_mesh(sequence_data["h_tsl"], sequence_data["h_coeffs"], sequence_data["side"])[0],
+            #     object_mesh_ls=apply_transformation_on_object_mesh(get_object_meshes_from_human_data(sequence_data), sequence_data['o_transf']),
+            #     show_axis=True,
+            #     filename=f"/home/wangminqi/workspace/test/DexPose/dataset/logs/debug/{sequence_data['which_sequence']}_he"
+            # )
+
         #### DEBUG CODE (old! really old!)
         # w2c = torch.eye(4).unsqueeze(0)
         # w2c[..., :3, :3] = R_w2v.cpu()
@@ -522,28 +544,6 @@ class BaseDatasetProcessor(ABC):
         #                    gt_hand_joints=sequence_data[f'rh_joints'][idx].cpu().numpy(),
         #                    show_axis=True)
         # #### DEBUG CODE
-
-            ### Debug object transformation ###
-            from utils.wmq import vis_frames_plotly
-            vis_frames_plotly(
-                pc_ls=[apply_transformation_human_data(sequence_data['o_points'], sequence_data['o_transf'])],
-                gt_hand_joints=sequence_data['h_joints'].cpu(),
-                object_mesh_ls=apply_transformation_on_object_mesh(get_object_meshes_from_human_data(sequence_data), sequence_data['o_transf']),
-                show_axis=True,
-                filename=f"/home/wangminqi/workspace/test/DexPose/dataset/logs/debug/{sequence_data['which_sequence']}_hj"
-            )
-            ### Debug object transformation ###
-
-            ### Debug hand coeffs ###
-            from utils.wmq import vis_frames_plotly
-            from utils.tools import extract_hand_points_and_mesh
-            vis_frames_plotly(
-                pc_ls=[apply_transformation_human_data(sequence_data['o_points'], sequence_data['o_transf'])],
-                gt_hand_joints=extract_hand_points_and_mesh(sequence_data["h_tsl"], sequence_data["h_coeffs"], sequence_data["side"])[0],
-                object_mesh_ls=apply_transformation_on_object_mesh(get_object_meshes_from_human_data(sequence_data), sequence_data['o_transf']),
-                show_axis=True,
-                filename=f"/home/wangminqi/workspace/test/DexPose/dataset/logs/debug/{sequence_data['which_sequence']}_he"
-            )
         
         return sequence_data
 
