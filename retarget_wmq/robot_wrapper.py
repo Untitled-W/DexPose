@@ -627,7 +627,7 @@ class HandRobotWrapper:
         # ---------------------------------------------------------------------- #
         
         self.wrist_name = {
-            "shadow_hand": "WJR1",
+            "shadow_hand": "WRJ1",
             "schunk_hand": "dummy_x_translation_joint",
             "inspire_hand": "dummy_x_translation_joint",
             "allegro_hand": "dummy_x_translation_joint",

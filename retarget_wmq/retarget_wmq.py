@@ -1,11 +1,18 @@
+import argparse
+import csv
+import json
 import torch
 import numpy as np
 import joblib
 import os
+import itertools
+from datetime import datetime
 from matplotlib import pyplot as plt
 
 from .robot_wrapper import load_robot, HandRobotWrapper
 # from utils.hand_model import load_robot
+
+from tqdm import tqdm
 
 print_once = (lambda: (lambda num=[0]: lambda *a, **k: (print(*a, **k), num.__setitem__(0, 1)) if num[0] == 0 else None)())
 
@@ -40,41 +47,39 @@ def quat_to_aa_wmq(quat, side='right'):
     euler = matrix_to_euler_angles(quaternion_to_matrix(quat) @ operator2mano[side], 'XYZ')
     return euler
 
-def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
+
+def retarget_sequence(seq_data, robot_hand: HandRobotWrapper, params: dict = None,
+                      do_vis: bool = False, save_dir: str = None):
 
     device = robot_hand.device
 
-    side = seq_data['side']
+    side = seq_data.get('side', 'right')
 
     # Init robot hand transformation
     init_hand_tsl, init_hand_quat = seq_data['h_joints'][:, 0], seq_data['h_coeffs'][:, 0]
-    # This is based on the design that
-    # (1) the first 6 DoF are dummy joints for world coordinate; 
-    # (2) they have the same representation convention;
-    dex_pose = torch.zeros((seq_data['h_joints'].shape[0], robot_hand.n_dofs), device=device)  # T x d
-
-    # Turn quat into axis-angle, this should use this certain code because different transformation varies.
+    dex_pose = torch.zeros((seq_data['h_joints'].shape[0], robot_hand.n_dofs), device=device)
     init_hand_aa = quat_to_aa_wmq(init_hand_quat)
     dex_pose[:, 3:6] = init_hand_aa.clone()
     robot_hand.compute_forward_kinematics(dex_pose)
     dex_pose[:, :3] = (init_hand_tsl - robot_hand.get_wrist()).clone()
     dex_pose.requires_grad_(True)
-    
+
     # Init robot hand pose (all joints align)
-    total_step = 200
-    lr = 0.01
-    sp_coeffs = .5
-    thres = 0.02
+    p = params or {}
+    total_step = int(p.get('stage1_total_step', 200))
+    lr = float(p.get('stage1_lr', 0.01))
+    sp_coeffs = float(p.get('stage1_sp_coeffs', 0.5))
+    thres = float(p.get('stage1_thres', 0.02))
     logger_1 = {
-        "is_plot_optimize": False,
-        "is_plot_timestep": True,
-        "is_vis": False,
-        "optimize_frame_check_ls": [30, 60, 90],
-        "vis_frame": 90,
-        "vis_interval": 10,
-        'plot_interval': 20,
+        "is_plot_optimize": bool(p.get('stage1_is_plot_optimize', False)),
+        "is_plot_timestep": bool(p.get('stage1_is_plot_timestep', True)),
+        "is_vis": bool(p.get('stage1_is_vis', False)),
+        "optimize_frame_check_ls": p.get('stage1_optimize_frame_check_ls', [30, 60, 90]),
+        "vis_frame": int(p.get('stage1_vis_frame', 90)),
+        "vis_interval": int(p.get('stage1_vis_interval', 10)),
+        'plot_interval': int(p.get('stage1_plot_interval', 20)),
         "history": {"hand_mesh":[], "robot_keypoints":[]},
-        "losses": {"E_align":[], f"E_spen x{sp_coeffs}":[]}
+        "losses": {"E_align":[], f"E_spen x{sp_coeffs}":[]}    
     }
     init_optimizer = torch.optim.Adam([dex_pose], lr=lr, weight_decay=0)
     mano_fingertip = seq_data['h_joints'].to(device)[:, robot_hand.human_keypoints_order, :]
@@ -83,7 +88,7 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
         fingertip_keypoints = robot_hand.get_all_joints_in_mano_order()
         E_align = torch.nn.functional.huber_loss(fingertip_keypoints, mano_fingertip, reduction='none').mean((-2,-1))
         E_spen = robot_hand.self_penetration(thres)
-        loss = E_align.sum() + E_spen.mean() * sp_coeffs # (B,) --> ()
+        loss = E_align.sum() + E_spen.mean() * sp_coeffs
         init_optimizer.zero_grad()
         loss.backward()
         init_optimizer.step()
@@ -93,11 +98,9 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
         logger_1['losses']['E_align'].append(E_align.detach().numpy().tolist())
         logger_1['losses'][f"E_spen x{sp_coeffs}"].append(E_spen.detach().numpy().tolist())
 
-    folder_name = "/home/wangminqi/workspace/test/DexPose/retarget_wmq/Taco_vis"
-    config_name = f"stage1_spen{sp_coeffs}_thres{thres}_step{total_step}_lr{lr}"
+    folder_name = save_dir
     filename = f"uid{seq_data['uid']}_{seq_data['which_sequence']}"
     if logger_1['is_vis']:
-        os.makedirs(os.path.join(folder_name, config_name, f"vis_frame{logger_1['vis_frame']}"), exist_ok=True)
         from utils.wmq import vis_frames_plotly
         TT = len(logger_1["history"]["hand_mesh"])
         vis_frames_plotly(
@@ -106,28 +109,26 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
             posi_pts_ls=[np.stack(logger_1['history']['robot_keypoints'])],
             hand_mesh_ls=[logger_1["history"]["hand_mesh"]],
             show_line=True,
-            filename=os.path.join(folder_name, config_name, f"vis_frame{logger_1['vis_frame']}", filename)
+            filename=os.path.join(folder_name, "visualization", f"vis_frame{logger_1['vis_frame']}_{filename}")
         )
     if logger_1['is_plot_optimize']:
-        os.makedirs(os.path.join(folder_name, config_name, 'optim'+'_'.join(map(str, logger_1['optimize_frame_check_ls']))), exist_ok=True)
         from matplotlib import pyplot as plt
         fig, axs = plt.subplots(1, len(logger_1["optimize_frame_check_ls"]), figsize=(6 * len(logger_1["optimize_frame_check_ls"]), 5))
         if len(logger_1["optimize_frame_check_ls"]) == 1: axs = [axs]
         for idx, ff_n in enumerate(logger_1["optimize_frame_check_ls"]):
             ax = axs[idx]
-            for lr in logger_1['losses']:
-                loss_item = np.stack([ii[ff_n] for ii in logger_1['losses'][lr]])
-                ax.plot(np.arange(len(loss_item)), loss_item, label=lr)
+            for lr_key in logger_1['losses']:
+                loss_item = np.stack([ii[ff_n] for ii in logger_1['losses'][lr_key]])
+                ax.plot(np.arange(len(loss_item)), loss_item, label=lr_key)
             ax.set_yscale('log')
             ax.set_xlabel("Step")
             ax.set_ylabel("Loss")
             ax.legend()
             ax.set_title(f"Frame {ff_n}")
         plt.tight_layout()
-        plt.savefig(os.path.join(folder_name, config_name, 'optim'+'_'.join(map(str, logger_1['optimize_frame_check_ls'])), filename+'.png'))
+        plt.savefig(os.path.join(folder_name, "loss", "optim_stage1", filename+'.png'))
         plt.close()
     if logger_1["is_plot_timestep"]:
-        os.makedirs(os.path.join(folder_name, config_name, "sequence_losses"), exist_ok=True)
         import matplotlib.pyplot as plt
         from matplotlib.colors import to_rgba
 
@@ -148,32 +149,32 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
             for j, opt_i in enumerate(idx_plt):
                 color = to_rgba(cmap(norm(j)))
                 ax.plot(range(T), loss_mat[opt_i], color=color, label=f'step {opt_i}' if j%max(1, len(idx_plt)//5)==0 else "")
-            ax.set_ylabel(name)
+                ax.set_ylabel(name)
             ax.set_yscale('log')
             if ax_idx==0:
                 ax.legend(bbox_to_anchor=(1.02,1), loc='upper left', fontsize=6)
         plt.xlabel('time step')
         plt.tight_layout()
-        plt.savefig(os.path.join(folder_name, config_name, "sequence_losses", f"{filename}.png"))
+        plt.savefig(os.path.join(folder_name, "loss", "seq_stage1", f"{filename}.png"))
         plt.close()
 
-    # Optimize qpos for better contact + less penetration + less self-penetration
-    total_step = 200
-    lr = 0.01
-    sp_coeffs = 5
-    thres = 0.02
-    dis_coeffs = 1
-    dis_thres = 0.01
-    pen_coeffs = 0.005
-    pen_thres = 0.005
+    # Stage 2
+    total_step = int(p.get('stage2_total_step', 200))
+    lr = float(p.get('stage2_lr', 0.01))
+    sp_coeffs = float(p.get('stage2_sp_coeffs', 5))
+    thres = float(p.get('stage2_thres', 0.02))
+    dis_coeffs = float(p.get('stage2_dis_coeffs', 1))
+    dis_thres = float(p.get('stage2_dis_thres', 0.01))
+    pen_coeffs = float(p.get('stage2_pen_coeffs', 0.005))
+    pen_thres = float(p.get('stage2_pen_thres', 0.005))
     logger_2 = {
-        "is_plot_optimize": False,
-        "is_plot_timestep": True,
-        "is_vis": False,
-        "optimize_frame_check_ls": [30, 60, 90],
-        "vis_frame": 90,
-        "vis_interval": 10,
-        "plot_interval": 20,
+        "is_plot_optimize": bool(p.get('stage2_is_plot_optimize', False)),
+        "is_plot_timestep": bool(p.get('stage2_is_plot_timestep', True)),
+        "is_vis": bool(p.get('stage2_is_vis', do_vis)),
+        "optimize_frame_check_ls": p.get('stage2_optimize_frame_check_ls', [30, 60, 90]),
+        "vis_frame": int(p.get('stage2_vis_frame', 90)),
+        "vis_interval": int(p.get('stage2_vis_interval', 10)),
+        "plot_interval": int(p.get('stage2_plot_interval', 20)),
         "history": {"hand_mesh":[], "robot_keypoints":[], "ct_pts":[], "corr_ct_pts":[],"spen":[], "inner_pts":[], "outer_pts":[]},
         "losses": {"E_align":[], f"E_spen x{sp_coeffs}":[], f"E_dist x{dis_coeffs}":[], f"E_pen x{pen_coeffs}":[]}
     }
@@ -186,7 +187,6 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
 
     for ii in tqdm(range(total_step), desc="Stage 2 optimization"):
         robot_hand.compute_forward_kinematics(dex_pose)
-        # fingertip_keypoints = robot_hand.get_align_points()
         fingertip_keypoints = robot_hand.get_all_joints_in_mano_order()
         E_align = torch.nn.functional.huber_loss(fingertip_keypoints, mano_fingertip, reduction='none').mean((-2,-1))
         E_dis, ct_pts, cc_ct_pts = robot_hand.cal_distance(pc_ls, pc_norm_ls, dis_thres, True)
@@ -208,11 +208,9 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
         logger_2["losses"][f"E_dist x{dis_coeffs}"].append(E_dis.detach().numpy().tolist())
         logger_2["losses"][f"E_pen x{pen_coeffs}"].append(E_pen.detach().numpy().tolist())
 
-    folder_name = "/home/wangminqi/workspace/test/DexPose/retarget_wmq/Taco_vis"
-    config_name = f"stage2_step{total_step}_all_lr{lr}_thres{thres}_spcoeffs{sp_coeffs}_pen{pen_coeffs}_{pen_thres}_dis{dis_coeffs}square_disthres{dis_thres}"
+    folder_name = save_dir
     filename = f"uid{seq_data['uid']}_{seq_data['which_sequence']}"
     if logger_2["is_vis"]:
-        os.makedirs(os.path.join(folder_name, config_name, f"vis_frame{check_frame}"), exist_ok=True)
         from utils.wmq import vis_dexhand_optimize_stage2
         obj_mesh = get_object_meshes_from_human_data(seq_data)
         obj_mesh_ls = apply_transformation_on_object_mesh(obj_mesh, seq_data['o_transf'][:, check_frame:check_frame+1, :, :])
@@ -228,10 +226,9 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
             corr_contact_pt_ls=np.stack(logger_2["history"]["corr_ct_pts"]),
             inner_pen_pts=logger_2["history"]["inner_pts"][check_frame],
             outer_pen_pts=logger_2["history"]["outer_pts"],
-            filename=os.path.join(folder_name, config_name, f"vis_frame{check_frame}", filename)
+            filename=os.path.join(folder_name, "visualization", f"vis_frame{check_frame}_{filename}")
         )
     if logger_2['is_plot_optimize']:
-        os.makedirs(os.path.join(folder_name, config_name, 'optim'+'_'.join(map(str, logger_2['optimize_frame_check_ls']))), exist_ok=True)
         from matplotlib import pyplot as plt
         fig = plt.figure(figsize=(6 * len(logger_2["optimize_frame_check_ls"]), 5 * 2))
         gs = fig.add_gridspec(2, len(logger_2["optimize_frame_check_ls"]), hspace=0.3)
@@ -239,9 +236,9 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
         # 上排：loss 曲线
         for col, ff_n in enumerate(logger_2["optimize_frame_check_ls"]):
             ax = fig.add_subplot(gs[0, col])
-            for lr in logger_2['losses']:
-                loss_item = np.stack([ii[ff_n] for ii in logger_2['losses'][lr]])
-                ax.plot(np.arange(len(loss_item)), loss_item, label=lr)
+            for lr_key in logger_2['losses']:
+                loss_item = np.stack([ii[ff_n] for ii in logger_2['losses'][lr_key]])
+                ax.plot(np.arange(len(loss_item)), loss_item, label=lr_key)
             ax.set_yscale('log')
             ax.set_xlabel("Step")
             ax.set_ylabel("Loss")
@@ -258,10 +255,9 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
             ax.legend()
             ax.set_title(f"Frame {ff_n}")
 
-        plt.savefig(os.path.join(folder_name, config_name, 'optim'+'_'.join(map(str, logger_2['optimize_frame_check_ls'])), filename+'.png'))
+        plt.savefig(os.path.join(folder_name, "loss", 'optim_stage2', filename+'.png'))
         plt.close()
     if logger_2["is_plot_timestep"]:
-        os.makedirs(os.path.join(folder_name, config_name, "sequence_losses"), exist_ok=True)
         import matplotlib.pyplot as plt
         from matplotlib.colors import to_rgba
 
@@ -277,7 +273,6 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
         norm = plt.Normalize(vmin=0, vmax=len(idx_plt)-1)
 
         for ax_idx, (name, loss_mat) in enumerate(logger_2['losses'].items()):
-            # 左列：loss 随 time-step 变化
             ax = axs[ax_idx]
             for j, opt_i in enumerate(idx_plt):
                 color = to_rgba(cmap(norm(j)))
@@ -298,142 +293,230 @@ def retarget_sequence(seq_data, robot_hand: HandRobotWrapper):
 
         plt.xlabel('time step')
         plt.tight_layout()
-        plt.savefig(os.path.join(folder_name, config_name, "sequence_losses", f"{filename}.png"))
+        plt.savefig(os.path.join(folder_name, 'loss', 'seq_stage2', f"{filename}.png"))
         plt.close()
 
-    retargeted_seq = dict(            
+    retargeted_seq = dict(
         which_hand=robot_hand.robot_name,
         dex_poses=dex_pose,
-        )
+    )
     retargeted_seq.update(seq_data)
 
     return retargeted_seq, logger_1['losses'], logger_2['losses']
 
-
-def main_retarget(seq_data_ls, robots, save_path):
+def main_retarget(seq_data_ls, robot_name, run_root, params: dict = None, vis: bool = False):
     
-    if os.path.isfile(save_path): os.remove(save_path)
-    processed_data = {}
+    vis_dir = os.path.join(run_root, 'visualization')
+    os.makedirs(vis_dir, exist_ok=True)
+    loss_dir = os.path.join(run_root, 'loss')
+    os.makedirs(loss_dir, exist_ok=True)
+    os.makedirs(os.path.join(loss_dir, 'seq_stage1'), exist_ok=True)
+    os.makedirs(os.path.join(loss_dir, 'seq_stage2'), exist_ok=True)
+
+    robot_hand = load_robot(robot_name)
+    print(f"Retargeting to {robot_hand.robot_name} ...")
+
+    # save params to config.json at run root
+    try:
+        with open(os.path.join(run_root, 'config.json'), 'w') as cf:
+            json.dump(params or {}, cf, indent=2)
+    except Exception:
+        pass
+
+    retargeted_data_all = []
+    losses_stage1_all = []
+    losses_stage2_all = []
+
+    save_path = os.path.join(run_root, f"{robot_name}_retargeted.p")
+    for i, seq_data in enumerate(seq_data_ls):
+        print(f"Sequence {i}: Processing sequence {seq_data['uid']} with {robot_name} from {seq_data.get('which_dataset','?')} with {seq_data.get('which_sequence','?')}")
+
+        retargeted_seq, losses_1, losses_2 = retarget_sequence(seq_data, robot_hand, params=params,save_dir=run_root)
+        retargeted_data_all.append(retargeted_seq)
+        losses_stage1_all.append(losses_1)
+        losses_stage2_all.append(losses_2)
+
+        with open(save_path, 'wb') as ofs:
+            joblib.dump(retargeted_data_all, ofs)
+            from utils.vis_utils import visualize_dex_hand_sequence
+        
+        if vis:
+            visualize_dex_hand_sequence(retargeted_seq, os.path.join(run_root, "visualization", f"{retargeted_seq['uid']}_{retargeted_seq['which_sequence']}"))
+
+    # Save all loss time series to loss.json (single file)
+    aggregated = {
+        'stage1': losses_stage1_all,
+        'stage2': losses_stage2_all
+    }
+    try:
+        with open(os.path.join(run_root, "loss", 'loss.json'), 'w') as lf:
+            json.dump(aggregated, lf)
+    except Exception:
+        pass
+
+    return {
+        'run_root': run_root,
+        'save_p': save_path
+    }
+
+
+def generate_seq(seq_data_ls, robots, base_save_dir, params: dict = None, vis: bool = False):
+
     for robot_name in robots:
-        robot_hand = load_robot(robot_name)
-        print(f"Retargeting to {robot_hand.robot_name} ...")
-        retargeted_data = []
-        losses_1_all = []
-        losses_2_all = []
-        for i, seq_data in enumerate(seq_data_ls):
-            print(f"Sequence {i}: Processing sequence {seq_data['uid']} with {robot_name} from {seq_data['which_dataset']} with {seq_data['which_sequence']}")
-            retargeted_seq, losses_1, losses_2 = retarget_sequence(seq_data, robot_hand)
-            retargeted_data.append(retargeted_seq)
-            losses_1_all.append(losses_1)
-            losses_2_all.append(losses_2)
+        robot_folder = os.path.join(base_save_dir, 'save_results', robot_name)
+        os.makedirs(robot_folder, exist_ok=True)
+        time_folder = datetime.now().strftime('%Y%m%d_%H%M%S')
+        root = os.path.join(robot_folder, time_folder)
+        os.makedirs(root, exist_ok=True)
+        main_retarget(seq_data_ls, robot_name, run_root=root, params=params, vis=False)
 
-            with open(save_path, 'wb') as ofs:
-                joblib.dump(retargeted_data, ofs)
-                from utils.vis_utils import visualize_dex_hand_sequence
+
+def find_params(seq_data_ls, robot_name, base_save_dir, param_grid: dict):
+    """
+    param_grid: dict of param_name -> list of values
+    For each combination, run main_retarget-like workflow and save results under
+    base_save_dir/save_results/<robot_name>/<datetime>/<param_combination>/
+    Save visualization for each sequence result under a visualization folder (per-combo).
+    Compute evaluation metric as described and save param_search_results.csv
+    """
+    robot_folder = os.path.join(base_save_dir, 'save_results', robot_name)
+    os.makedirs(robot_folder, exist_ok=True)
+    time_folder = datetime.now().strftime('%Y%m%d_%H%M%S')
+    root = os.path.join(robot_folder, time_folder)
+    os.makedirs(root, exist_ok=True)
+
+    keys = list(param_grid.keys())
+    combos = list(itertools.product(*[param_grid[k] for k in keys]))
+
+    results = []
+    for combo in combos:
+        combo_dict = dict(zip(keys, combo))
+        combo_name = '_'.join([f"{k}{v}" for k,v in combo_dict.items()])
+        combo_dir = os.path.join(root, combo_name)
+        os.makedirs(combo_dir, exist_ok=True)
+
+        # run retarget for all sequences with this combo
+        main_retarget(seq_data_ls, robot_name, run_root=combo_dir, params=combo_dict, vis=True)
+        
+        # compute evaluation metric
+        eval_metric = None
+        loss_json_path = os.path.join(combo_dir, "loss", "loss.json")
+        with open(loss_json_path, 'r') as lf:
+            loss_data = json.load(lf)
+
+        seq_metrics = []
+        loss_names = loss_data.get('stage2', [])[0].keys()
+        # loss_data.get('stage2', []): a list (seq num) of dicts (loss name -> loss values over optim-time * time-steps)
+        for seq_losses in loss_data.get('stage2', []):
+            contact_mask = None
+            for k, v in seq_losses.items():
+                if 'E_dist' in k:
+                    e_dist_values = np.array(v[-1])
+                    contact_mask = (e_dist_values != 0)
             
-            os.makedirs('/home/wangminqi/workspace/test/DexPose/retarget_wmq/Taco_vis/seq_vis/',exist_ok=True)
-            visualize_dex_hand_sequence(retargeted_seq, f"/home/wangminqi/workspace/test/DexPose/retarget_wmq/Taco_vis/seq_vis/{robot_name}_{retargeted_seq['uid']}")
+            seq_metrics.append([np.mean([seq_losses[loss_name][-1][t] for t in range(len(contact_mask)) if contact_mask[t]]) for loss_name in loss_names])
 
-        processed_data[robot_hand] = retargeted_data
+        # write csv
+        csv_path = os.path.join(combo_dir, 'loss_results.csv')
+        with open(csv_path, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(loss_names)
+            for sm in seq_metrics:
+                writer.writerow(sm)
 
-        if False:
+        results.append([np.mean([sm[i] for sm in seq_metrics]) for i in range(len(loss_names))])
 
-            def visualize_time_series_with_fill_between(losses_all_dict: dict, title: str = "Loss Distribution Over Timesteps", filename: str = "Loss_Distribution.png"):
-                """
-                Visualizes multiple time series using fill_between to represent the spread
-                of N items at each timestep, with opacity diminishing for values further from 1.0.
+    # write overall csv
+    csv_path = os.path.join(root, 'param_search_results.csv')
+    with open(csv_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        header = keys + list(loss_names)
+        writer.writerow(header)
+        for i, combo in enumerate(combos):
+            row = list(combo) + results[i]
+            writer.writerow(row)
 
-                Args:
-                    losses_all_dict (dict): A dictionary where keys are loss types (e.g., 'total_loss')
-                                            and values are lists of lists.
-                                            Outer list (T elements): Represents timesteps.
-                                            Inner list (N elements): Represents individual loss values at that timestep.
-                    title (str): The title for the plot.
-                """
+    return root
 
-                fig, axes = plt.subplots(nrows=len(losses_all_dict), ncols=1, figsize=(12, 5 * len(losses_all_dict)), squeeze=False)
-                fig.suptitle(title, fontsize=16)
+def get_piece_by_frame(
+    seq_data, 
+    frame_slice: slice = None
+):
+    
+    if frame_slice is None:
+        return seq_data
 
-                for i, (key, i_data_list) in enumerate(losses_all_dict.items()):
-                    ax = axes[i, 0]
+    sliced_data = seq_data.copy()
+    # --- 对与时间维度相关的字段应用切片 ---
+    sliced_data['seq_len'] = len(range(*frame_slice.indices(seq_data['seq_len'])))
 
-                    # Store statistics for each timestep
-                    means = []
-                    stds = []
-                    quantiles_25 = []
-                    quantiles_75 = []
-                    mins = []
-                    maxs = []
+    # 1. 手部数据 (时间维度在 dim=0)
+    sliced_data['h_tsl'] = seq_data['h_tsl'][frame_slice]
+    sliced_data['h_coeffs'] = seq_data['h_coeffs'][frame_slice]
+    sliced_data['h_params'] = seq_data['h_params'][frame_slice]
+    
+    if "dex_pose" in seq_data:
+        sliced_data['dex_pose'] = seq_data['dex_pose'][frame_slice]
+    if "h_joints" in seq_data:
+        sliced_data['h_joints'] = seq_data['h_joints'][frame_slice]
 
-                    current_values = np.array(i_data_list) # N x T
-                    means = np.mean(current_values, axis=0)
-                    stds = np.std(current_values, axis=0)
-                    quantiles_25 = np.percentile(current_values, 25, axis=0)
-                    quantiles_75 = np.percentile(current_values, 75, axis=0)
-                    mins = np.min(current_values, axis=0)
-                    maxs = np.max(current_values, axis=0)
-                    timesteps = np.arange(current_values.shape[1])
+    # 2. 物体位姿数据 (时间维度在 dim=1)
+    # 形状为 (K, T, 4, 4)，所以我们在第二个维度上切片
+    sliced_data['o_transf'] = seq_data['o_transf'][:, frame_slice]
 
-                    # Define color for the fills
-                    base_color = 'skyblue' #'steelblue'
-
-                    # Layer 1: Fill between min and max (widest range, lowest opacity)
-                    ax.fill_between(timesteps, mins, maxs, color=base_color, alpha=0.1, label='Min/Max Range')
-
-                    # Layer 2: Fill between 25th and 75th percentile (interquartile range, medium opacity)
-                    ax.fill_between(timesteps, quantiles_25, quantiles_75, color=base_color, alpha=0.3, label='25-75 Percentile')
-
-                    # Layer 3: Fill between mean - std and mean + std (closer to mean, higher opacity)
-                    # Use an alpha value that visually blends to higher opacity
-                    ax.fill_between(timesteps, means - stds, means + stds, color=base_color, alpha=0.5, label='Mean +/- Std Dev')
-
-                    # Layer 4: Plot the mean line (most opaque)
-                    ax.plot(timesteps, means, color='darkblue', linewidth=2, label='Mean Value')
-
-                    ax.set_title(f"Loss Type: {key}")
-                    ax.set_xlabel("Timestep")
-                    ax.set_ylabel("Loss Value")
-                    ax.legend()
-                    ax.grid(True, linestyle=':', alpha=0.6) # Light grid
-
-                plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to make space for suptitle
-                plt.savefig(filename)
-
-            # draw losses
-            avg_losses_1 = {}
-            avg_losses_2 = {}
-            for key in losses_1_all[0]:
-                avg_losses_1[key] = [losses_1_all[i][key] for i in range(len(losses_1_all))] # list (N) of list (T)
-            for key in losses_2_all[0]:
-                avg_losses_2[key] = [losses_2_all[i][key] for i in range(len(losses_2_all))] # list (N) of list (T)
-
-            visualize_time_series_with_fill_between(
-                avg_losses_1, 
-                title=f"Stage 1 Losses for {robot_name}", 
-                filename=f"retarget_wmq/0929vis/all_seq_stage1_losses_{robot_name}"
-            )
-            visualize_time_series_with_fill_between(
-                avg_losses_2, 
-                title=f"Stage 2 Losses for {robot_name}", 
-                filename=f"retarget_wmq/0929vis/all_seq_stage2_losses_{robot_name}"
-            )
-
-    return processed_data
-
+    return sliced_data
 
 if __name__ == "__main__":
-    
-    import os
-    import pickle
-    import random
-    from tqdm import tqdm
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mode', choices=['generate_seq', 'find_params'], default='generate_seq')
+    parser.add_argument('--robots', nargs='+', default=['shadow_hand'])
+    parser.add_argument('--file_path', type=str, help='input pickle file path with sequences')
+    parser.add_argument('--save_base', type=str, default=os.path.dirname(__file__))
+    parser.add_argument('--vis', action='store_true')
+    parser.add_argument('--param_json', type=str, help='optional json file with hyperparameters')
+    parser.add_argument('--param_grid_json', type=str, help='json file specifying grid for find_params')
+    args = parser.parse_args()
 
-    robots = ['allegro_hand']
-    file_path = '/home/wangminqi/workspace/test/data/Taco/human_save0929/seq_final_1.p'
-    for robot_name in robots:
-        save_path = f'/home/wangminqi/workspace/test/data/Taco/dex_save1002/{robot_name}_debug.p'
-        with open(file_path, 'rb') as f:
+    # load sequences
+    import pickle, random
+    seq_data_ls = []
+    if args.file_path:
+        with open(args.file_path, 'rb') as f:
             seq_data_ls = pickle.load(f)
-        seq_data_ls = random.sample(seq_data_ls, 1)
-        processed_data = main_retarget(seq_data_ls, robots, save_path)
+    else:
+        print('No file_path provided, exiting')
+        exit(1)
 
+    for i in range(len(seq_data_ls)):
+        seq_data_ls[i]['object_mesh_path'] = [ii.replace('/home/wangminqi/workspace/test/', '/mnt/shared-storage-user/wangminqi/') for ii in seq_data_ls[i]['object_mesh_path']]
+
+    seq_data_ls = [get_piece_by_frame(ii) for ii in random.sample(seq_data_ls, 10)]
+
+    params = {
+        'stage2_is_vis': True,
+        
+    }
+    if args.param_json:
+        with open(args.param_json, 'r') as pf:
+            params = json.load(pf)
+
+    os.makedirs(args.save_base, exist_ok=True)
+
+    if args.mode == 'generate_seq':
+        results = generate_seq(seq_data_ls, args.robots, args.save_base, params=params)
+        print('Saved results to:', results)
+    else:
+        if not args.param_grid_json:
+            # using default grid
+            param_grid = {
+                'stage2_sp_coeffs': [1, 5],
+                'stage2_pen_coeffs': [0.001, 0.005],
+                'stage2_pen_thres': [0.005, 0.01],
+                'stage2_dis_coeffs': [0.5, 1],
+                'stage2_dis_thres': [0.01, 0.02],
+            }
+        else:
+            with open(args.param_grid_json, 'r') as pgf:
+                param_grid = json.load(pgf)
+        root = find_params(seq_data_ls, args.robots[0], args.save_base, param_grid)
+        print('Param search results at', root)
